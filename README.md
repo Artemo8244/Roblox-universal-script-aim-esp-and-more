@@ -22,7 +22,7 @@ https://guns.lol/artemo8244
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
 
-(P.S. Мне не помешала бы помощь, так что я её ищу)
+Мне не помешала бы помощь, так что я её ищу :)
 
 ### Script Information
 
@@ -47,6 +47,4 @@ https://guns.lol/artemo8244
 Script:
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
-```
-
-(P.S. I could use some help, so I'm looking for it.)
+ I could use some help, so I'm looking for it. :)
