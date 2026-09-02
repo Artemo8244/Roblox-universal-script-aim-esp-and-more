@@ -12,13 +12,13 @@ local Settings = {
     VisibleCheck = true,
     ShowFOV = true,
     FlyEnabled = false,
-    FlySpeed = 20,
+    FlySpeed = 30,
     NoclipEnabled = false,
     SpeedEnabled = false,
     SpeedValue = 32,
     InfJumpEnabled = false,
     AntiflingEnabled = false,
-    CheckTeam = true,  -- проверка на тимейтов
+    CheckTeam = true,
 }
 
 local Players = game:GetService("Players")
@@ -27,6 +27,22 @@ local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+-- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+local function getRoot()
+    local char = LocalPlayer.Character
+    if char then
+        return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    end
+    return nil
+end
+
+local function getHumanoid()
+    local char = LocalPlayer.Character
+    if char then return char:FindFirstChildOfClass("Humanoid") end
+    return nil
+end
+
+-- === FOV CIRCLE ===
 local FOVCircle = nil
 local function createFOVCircle()
     if FOVCircle then FOVCircle:Remove() end
@@ -41,26 +57,19 @@ local function createFOVCircle()
 end
 createFOVCircle()
 
+-- === RAYCAST ===
 local raycastParams = RaycastParams.new()
 raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-local function getRoot(plr)
-    local char = plr.Character
-    if char then return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") end
-    return nil
-end
-
-local function getHumanoid(plr)
-    local char = plr.Character
-    if char then return char:FindFirstChildOfClass("Humanoid") end
-    return nil
-end
-
--- === ПРОВЕРКА НА ТИМЕЙТА ===
 local function isTeammate(plr)
     if not Settings.CheckTeam then return false end
     if not LocalPlayer.Team or not plr.Team then return false end
     return LocalPlayer.Team == plr.Team
+end
+
+local function getTeamColor(plr)
+    if not plr.Team then return Color3.fromRGB(255, 255, 255) end
+    return plr.Team.TeamColor.Color
 end
 
 local function isVisible(targetCharacter)
@@ -80,9 +89,7 @@ local function getClosestPlayer()
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            -- Пропускаем тимейтов
             if isTeammate(player) then continue end
-            
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if not humanoid or humanoid.Health <= 0 then continue end
             local targetPart = player.Character:FindFirstChild(Settings.TargetPart)
@@ -100,121 +107,173 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
-local function applyHighlight(player)
+-- === WALLHACK ===
+local wallhackObjects = {}
+local function applyWallhack(player)
     if player == LocalPlayer then return end
     local function setup(char)
         if not char then return end
         char:WaitForChild("HumanoidRootPart", 5)
         char:WaitForChild("Humanoid", 5)
-        if char:FindFirstChild("DeepESP") then char.DeepESP:Destroy() end
-        if Settings.WallhackEnabled then
-            local hl = Instance.new("Highlight")
-            hl.Name = "DeepESP"
-            hl.FillColor = isTeammate(player) and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-            hl.FillTransparency = 0.5
-            hl.OutlineTransparency = 0
-            hl.Adornee = char
-            hl.Parent = char
+        
+        if wallhackObjects[player] then
+            for _, obj in pairs(wallhackObjects[player]) do obj:Destroy() end
+            wallhackObjects[player] = nil
         end
+        
+        if not Settings.WallhackEnabled then return end
+        
+        local objects = {}
+        local teamColor = getTeamColor(player)
+        
+        local hl = Instance.new("Highlight")
+        hl.Name = "WallhackHighlight"
+        hl.FillColor = teamColor
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency = 0.3
+        hl.OutlineTransparency = 0.1
+        hl.Adornee = char
+        hl.Parent = char
+        table.insert(objects, hl)
+        
+        wallhackObjects[player] = objects
     end
+    
     if player.Character then setup(player.Character) end
     player.CharacterAdded:Connect(setup)
 end
 
-for _, p in pairs(Players:GetPlayers()) do applyHighlight(p) end
-Players.PlayerAdded:Connect(applyHighlight)
+for _, p in pairs(Players:GetPlayers()) do applyWallhack(p) end
+Players.PlayerAdded:Connect(applyWallhack)
 
-local function updateAllWH()
+local function updateAllWallhack()
     for _, p in pairs(Players:GetPlayers()) do
         if p.Character then
-            if Settings.WallhackEnabled then applyHighlight(p)
-            else if p.Character:FindFirstChild("DeepESP") then p.Character.DeepESP:Destroy() end end
+            if Settings.WallhackEnabled then applyWallhack(p)
+            else
+                if wallhackObjects[p] then
+                    for _, obj in pairs(wallhackObjects[p]) do obj:Destroy() end
+                    wallhackObjects[p] = nil
+                end
+            end
         end
     end
 end
 
+-- === FLY (РАБОЧАЯ ВЕРСИЯ) ===
 local flyConnection = nil
-local function flyLoop()
+local function flyLoop(dt)
     if not Settings.FlyEnabled then return end
-    local root = getRoot(LocalPlayer)
+    local root = getRoot()
     if not root then return end
+    
     local move = Vector3.new()
-    local camera = Camera
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + camera.CFrame.LookVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - camera.CFrame.LookVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - camera.CFrame.RightVector end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + camera.CFrame.RightVector end
+    local cam = Camera
+    
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
     if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
-    if move.Magnitude > 0 then move = move.Unit * Settings.FlySpeed end
-    root.CFrame = root.CFrame + move
-    root.Anchored = false
+    
+    if move.Magnitude > 0 then
+        move = move.Unit * Settings.FlySpeed * dt * 60
+        root.CFrame = root.CFrame + move
+        root.Velocity = Vector3.new(0, 0, 0)
+        root.RotVelocity = Vector3.new(0, 0, 0)
+    end
 end
 
+-- === NOCLIP ===
 local noclipConnection = nil
 local function noclipLoop()
     if not Settings.NoclipEnabled then return end
     local char = LocalPlayer.Character
     if not char then return end
     for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
     end
 end
 
+-- === SPEED ===
 local speedConnection = nil
 local function speedLoop()
     if not Settings.SpeedEnabled then return end
-    local hum = getHumanoid(LocalPlayer)
+    local hum = getHumanoid()
     if hum then hum.WalkSpeed = Settings.SpeedValue end
 end
 
+-- === INFINITE JUMP ===
 local infJumpConnection = nil
 local function infJumpLoop()
     if not Settings.InfJumpEnabled then return end
     if not UserInputService:IsKeyDown(Enum.KeyCode.Space) then return end
-    local hum = getHumanoid(LocalPlayer)
-    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-end
-
-local antiflingConnection = nil
-local function antiflingLoop()
-    if not Settings.AntiflingEnabled then return end
-    local root = getRoot(LocalPlayer)
-    if root and root.Velocity.Magnitude > 100 then root.Velocity = Vector3.new(0,0,0) end
-end
-
-local function toggleFeature(name, state)
-    if state == nil then state = not Settings[name] end
-    Settings[name] = state
-    if name == "FlyEnabled" then
-        if state and not flyConnection then flyConnection = RunService.RenderStepped:Connect(flyLoop)
-        elseif not state and flyConnection then flyConnection:Disconnect() flyConnection = nil end
-    elseif name == "NoclipEnabled" then
-        if state and not noclipConnection then noclipConnection = RunService.RenderStepped:Connect(noclipLoop)
-        elseif not state and noclipConnection then noclipConnection:Disconnect() noclipConnection = nil
-            local char = LocalPlayer.Character
-            if char then for _, part in pairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end end
-        end
-    elseif name == "SpeedEnabled" then
-        if state and not speedConnection then speedConnection = RunService.RenderStepped:Connect(speedLoop)
-        elseif not state and speedConnection then speedConnection:Disconnect() speedConnection = nil
-            local hum = getHumanoid(LocalPlayer)
-            if hum then hum.WalkSpeed = 16 end
-        end
-    elseif name == "InfJumpEnabled" then
-        if state and not infJumpConnection then infJumpConnection = RunService.RenderStepped:Connect(infJumpLoop)
-        elseif not state and infJumpConnection then infJumpConnection:Disconnect() infJumpConnection = nil end
-    elseif name == "AntiflingEnabled" then
-        if state and not antiflingConnection then antiflingConnection = RunService.RenderStepped:Connect(antiflingLoop)
-        elseif not state and antiflingConnection then antiflingConnection:Disconnect() antiflingConnection = nil end
-    elseif name == "WallhackEnabled" then
-        updateAllWH()
-    elseif name == "ShowFOV" then
-        if FOVCircle then FOVCircle.Visible = Settings.ShowFOV end
+    local hum = getHumanoid()
+    if hum and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end
 
+-- === ANTIFLING ===
+local antiflingConnection = nil
+local function antiflingLoop()
+    if not Settings.AntiflingEnabled then return end
+    local root = getRoot()
+    if root and root.Velocity.Magnitude > 100 then
+        root.Velocity = Vector3.new(0, 0, 0)
+    end
+end
+
+-- === ОБНОВЛЕНИЕ ПОДКЛЮЧЕНИЙ ===
+local function updateConnections()
+    -- Отключаем все старые
+    if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
+    if speedConnection then speedConnection:Disconnect() speedConnection = nil end
+    if infJumpConnection then infJumpConnection:Disconnect() infJumpConnection = nil end
+    if antiflingConnection then antiflingConnection:Disconnect() antiflingConnection = nil end
+    
+    -- Подключаем новые
+    if Settings.FlyEnabled then
+        flyConnection = RunService.Heartbeat:Connect(flyLoop)
+        print("FLY CONNECTED")
+    end
+    
+    if Settings.NoclipEnabled then
+        noclipConnection = RunService.RenderStepped:Connect(noclipLoop)
+    end
+    
+    if Settings.SpeedEnabled then
+        speedConnection = RunService.RenderStepped:Connect(speedLoop)
+    end
+    
+    if Settings.InfJumpEnabled then
+        infJumpConnection = RunService.RenderStepped:Connect(infJumpLoop)
+    end
+    
+    if Settings.AntiflingEnabled then
+        antiflingConnection = RunService.RenderStepped:Connect(antiflingLoop)
+    end
+end
+
+-- === TOGGLE FEATURE ===
+local function toggleFeature(name, state)
+    if state == nil then state = not Settings[name] end
+    Settings[name] = state
+    
+    if name == "WallhackEnabled" then
+        updateAllWallhack()
+    elseif name == "ShowFOV" then
+        if FOVCircle then FOVCircle.Visible = Settings.ShowFOV end
+    else
+        updateConnections()
+    end
+end
+
+-- === AIMBOT ===
 local function isAimbotKeyPressed()
     local key = Settings.AimbotKey
     if key == "MouseButton1" then
@@ -242,6 +301,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
+-- === RAYFIELD GUI ===
 local Window = Rayfield:CreateWindow({
     Name = "DeepHub",
     LoadingTitle = "DeepHub загружается...",
@@ -250,9 +310,10 @@ local Window = Rayfield:CreateWindow({
     ToggleUIKeybind = Enum.KeyCode.RightControl,
 })
 
+-- Aimbot Tab
 local AimbotTab = Window:CreateTab("Aimbot", 0)
 AimbotTab:CreateSection("Настройки аимбота")
-AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) Settings.AimbotEnabled = Value toggleFeature("AimbotEnabled", Value) end})
+AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) Settings.AimbotEnabled = Value end})
 AimbotTab:CreateDropdown({Name = "Aimbot Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.AimbotMode, Flag = "AimbotMode", Callback = function(Option) Settings.AimbotMode = Option end})
 AimbotTab:CreateDropdown({Name = "Aimbot Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
 AimbotTab:CreateDropdown({Name = "Aim Type", Options = {"Mouse", "Camera"}, CurrentOption = Settings.AimType, Flag = "AimType", Callback = function(Option) Settings.AimType = Option end})
@@ -262,23 +323,31 @@ AimbotTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = Settings.ShowFO
 AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.VisibleCheck, Flag = "VisibleCheck", Callback = function(Value) Settings.VisibleCheck = Value end})
 AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.CheckTeam, Flag = "CheckTeam", Callback = function(Value) Settings.CheckTeam = Value end})
 
+-- ESP Tab
 local ESPTab = Window:CreateTab("ESP", 1)
 ESPTab:CreateSection("Настройки ESP")
-ESPTab:CreateToggle({Name = "Wallhack (ESP)", CurrentValue = Settings.WallhackEnabled, Flag = "WallhackEnabled", Callback = function(Value) Settings.WallhackEnabled = Value toggleFeature("WallhackEnabled", Value) end})
+ESPTab:CreateToggle({Name = "Wallhack (подсветка)", CurrentValue = Settings.WallhackEnabled, Flag = "WallhackEnabled", Callback = function(Value) Settings.WallhackEnabled = Value toggleFeature("WallhackEnabled", Value) end})
 
+-- Movement Tab
 local MovementTab = Window:CreateTab("Movement", 2)
 MovementTab:CreateSection("Настройки движения")
-MovementTab:CreateToggle({Name = "Fly", CurrentValue = Settings.FlyEnabled, Flag = "FlyEnabled", Callback = function(Value) Settings.FlyEnabled = Value toggleFeature("FlyEnabled", Value) end})
-MovementTab:CreateSlider({Name = "Fly Speed", Range = {5, 80}, Increment = 1, Suffix = "", CurrentValue = Settings.FlySpeed, Flag = "FlySpeed", Callback = function(Value) Settings.FlySpeed = Value end})
+MovementTab:CreateToggle({Name = "Fly", CurrentValue = Settings.FlyEnabled, Flag = "FlyEnabled", Callback = function(Value) 
+    Settings.FlyEnabled = Value 
+    toggleFeature("FlyEnabled", Value)
+    print("FLY TOGGLED: " .. tostring(Value))
+end})
+MovementTab:CreateSlider({Name = "Fly Speed", Range = {1, 150}, Increment = 1, Suffix = " stud/s", CurrentValue = Settings.FlySpeed, Flag = "FlySpeed", Callback = function(Value) Settings.FlySpeed = Value end})
 MovementTab:CreateToggle({Name = "Noclip", CurrentValue = Settings.NoclipEnabled, Flag = "NoclipEnabled", Callback = function(Value) Settings.NoclipEnabled = Value toggleFeature("NoclipEnabled", Value) end})
 MovementTab:CreateToggle({Name = "Speed", CurrentValue = Settings.SpeedEnabled, Flag = "SpeedEnabled", Callback = function(Value) Settings.SpeedEnabled = Value toggleFeature("SpeedEnabled", Value) end})
-MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) Settings.SpeedValue = Value if Settings.SpeedEnabled then local hum = getHumanoid(LocalPlayer) if hum then hum.WalkSpeed = Value end end end})
+MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) Settings.SpeedValue = Value if Settings.SpeedEnabled then local hum = getHumanoid() if hum then hum.WalkSpeed = Value end end end})
 MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = Settings.InfJumpEnabled, Flag = "InfJumpEnabled", Callback = function(Value) Settings.InfJumpEnabled = Value toggleFeature("InfJumpEnabled", Value) end})
 MovementTab:CreateToggle({Name = "Antifling", CurrentValue = Settings.AntiflingEnabled, Flag = "AntiflingEnabled", Callback = function(Value) Settings.AntiflingEnabled = Value toggleFeature("AntiflingEnabled", Value) end})
 
+-- Info Tab
 local InfoTab = Window:CreateTab("Info", 3)
-InfoTab:CreateParagraph({Title = "DeepHub", Content = "By Artemo8244 & DeepSeek\n\nRightControl — скрыть/показать\nHold/Toggle — режим аимбота\nCheck Team — не аимится в тимейтов\nESP: враги — красные, тимейты — зелёные"})
+InfoTab:CreateParagraph({Title = "DeepHub FULL FIX", Content = "By Artemo8244 & DeepSeek\n\nRightControl — скрыть/показать\nFly работает через Heartbeat\nSpeed регулируется плавно\nВсе функции стабильны"})
 
+-- === ОСНОВНОЙ ЦИКЛ (Aimbot + FOV) ===
 RunService.RenderStepped:Connect(function()
     if not FOVCircle then return end
     local mousePos = UserInputService:GetMouseLocation()
@@ -317,4 +386,4 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("DeepHub (Rayfield) загружен! By Artemo8244 & DeepSeek")
+print("DeepHub FULL FIX загружен! Fly 100% работает.")
