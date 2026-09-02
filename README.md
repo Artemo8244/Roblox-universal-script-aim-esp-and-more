@@ -17,6 +17,8 @@
 **За помощью, которая мне не помешает, а также за всеми контактными данными заходите этот сайт *
 https://guns.lol/artemo8244
 
+Скрипт loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
+Script loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
 ### Script Information
 
 This script was developed with the assistance of DeepSeek AI and personally tested by me — Artemo8244.
