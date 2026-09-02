@@ -1,16 +1,29 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Settings = {
+    -- Rage Aimbot
     AimbotEnabled = false,
     AimbotMode = "Hold",
     AimbotKey = "MouseButton2",
     AimType = "Mouse",
     FOV = 150,
     Smoothness = 0.5,
-    WallhackEnabled = false,
     TargetPart = "Head",
     VisibleCheck = true,
     ShowFOV = true,
+    CheckTeam = true,
+    
+    -- Legit Bot
+    LegitBotEnabled = false,
+    LegitBotFOV = 80,
+    LegitBotSmoothness = 0.3,
+    LegitBotSpeed = 15,
+    
+    -- Silent Aim
+    SilentAimEnabled = false,
+    SilentAimHitChance = 100,
+    
+    -- Movement
     FlyEnabled = false,
     FlySpeed = 30,
     NoclipEnabled = false,
@@ -18,7 +31,9 @@ local Settings = {
     SpeedValue = 32,
     InfJumpEnabled = false,
     AntiflingEnabled = false,
-    CheckTeam = true,
+    
+    -- Visual
+    WallhackEnabled = false,
 }
 
 local Players = game:GetService("Players")
@@ -26,6 +41,9 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+
+-- === SILENT AIM TARGET ===
+local SilentTarget = nil
 
 -- === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 local function getRoot()
@@ -42,20 +60,40 @@ local function getHumanoid()
     return nil
 end
 
--- === FOV CIRCLE ===
+-- === FOV КРУГИ ===
 local FOVCircle = nil
-local function createFOVCircle()
-    if FOVCircle then FOVCircle:Remove() end
+local LegitFOVCircle = nil
+
+local function updateFOVCircle()
+    if FOVCircle then FOVCircle:Remove() FOVCircle = nil end
+    if LegitFOVCircle then LegitFOVCircle:Remove() LegitFOVCircle = nil end
+    
     if not Drawing then return end
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Thickness = 2
-    FOVCircle.NumSides = 64
-    FOVCircle.Radius = Settings.FOV
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Filled = false
-    FOVCircle.Visible = Settings.ShowFOV
+    
+    -- Красный круг — Rage Aimbot
+    if Settings.AimbotEnabled and Settings.ShowFOV then
+        FOVCircle = Drawing.new("Circle")
+        FOVCircle.Thickness = 2
+        FOVCircle.NumSides = 64
+        FOVCircle.Radius = Settings.FOV
+        FOVCircle.Color = Color3.fromRGB(255, 50, 50)
+        FOVCircle.Filled = false
+        FOVCircle.Visible = true
+    end
+    
+    -- Зелёный круг — Legit Bot
+    if Settings.LegitBotEnabled and Settings.ShowFOV then
+        LegitFOVCircle = Drawing.new("Circle")
+        LegitFOVCircle.Thickness = 2
+        LegitFOVCircle.NumSides = 64
+        LegitFOVCircle.Radius = Settings.LegitBotFOV
+        LegitFOVCircle.Color = Color3.fromRGB(50, 255, 50)
+        LegitFOVCircle.Filled = false
+        LegitFOVCircle.Visible = true
+    end
 end
-createFOVCircle()
+
+updateFOVCircle()
 
 -- === RAYCAST ===
 local raycastParams = RaycastParams.new()
@@ -82,9 +120,10 @@ local function isVisible(targetCharacter)
     return raycastResult == nil
 end
 
-local function getClosestPlayer()
+local function getClosestPlayer(fov)
+    fov = fov or Settings.FOV
     local closestPlayer = nil
-    local shortestDistance = Settings.FOV
+    local shortestDistance = fov
     local mousePos = UserInputService:GetMouseLocation()
 
     for _, player in pairs(Players:GetPlayers()) do
@@ -105,6 +144,38 @@ local function getClosestPlayer()
         end
     end
     return closestPlayer
+end
+
+-- === SILENT AIM ===
+local function setupSilentAim()
+    if not Settings.SilentAimEnabled then return end
+    
+    local mt = getrawmetatable and getrawmetatable(game) or debug.getmetatable(game)
+    if not mt then return end
+    
+    local old_namecall = mt.__namecall
+    
+    setreadonly(mt, false)
+    
+    mt.__namecall = newcclosure(function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod and getnamecallmethod() or "Unknown"
+        
+        if method == "Raycast" and self == workspace and Settings.SilentAimEnabled then
+            if SilentTarget and SilentTarget.Character then
+                local targetPart = SilentTarget.Character:FindFirstChild(Settings.TargetPart)
+                if targetPart and math.random(1, 100) <= Settings.SilentAimHitChance then
+                    args[2] = (targetPart.Position - args[1]).Unit * args[2].Magnitude
+                    return old_namecall(self, unpack(args))
+                end
+            end
+        end
+        
+        return old_namecall(self, ...)
+    end)
+    
+    setreadonly(mt, true)
+    print("Silent Aim ACTIVE")
 end
 
 -- === WALLHACK ===
@@ -160,12 +231,20 @@ local function updateAllWallhack()
     end
 end
 
--- === FLY (РАБОЧАЯ ВЕРСИЯ) ===
+-- === FLY ===
 local flyConnection = nil
+local flyBodyVelocity = nil
+
 local function flyLoop(dt)
     if not Settings.FlyEnabled then return end
     local root = getRoot()
     if not root then return end
+    
+    if not flyBodyVelocity or flyBodyVelocity.Parent == nil then
+        flyBodyVelocity = Instance.new("BodyVelocity")
+        flyBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        flyBodyVelocity.Parent = root
+    end
     
     local move = Vector3.new()
     local cam = Camera
@@ -178,11 +257,12 @@ local function flyLoop(dt)
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
     
     if move.Magnitude > 0 then
-        move = move.Unit * Settings.FlySpeed * dt * 60
-        root.CFrame = root.CFrame + move
-        root.Velocity = Vector3.new(0, 0, 0)
-        root.RotVelocity = Vector3.new(0, 0, 0)
+        flyBodyVelocity.Velocity = move.Unit * Settings.FlySpeed * 10
+    else
+        flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
     end
+    
+    root.Velocity = Vector3.new(0, 0, 0)
 end
 
 -- === NOCLIP ===
@@ -204,6 +284,11 @@ local function speedLoop()
     if not Settings.SpeedEnabled then return end
     local hum = getHumanoid()
     if hum then hum.WalkSpeed = Settings.SpeedValue end
+end
+
+local function resetSpeed()
+    local hum = getHumanoid()
+    if hum then hum.WalkSpeed = 16 end
 end
 
 -- === INFINITE JUMP ===
@@ -229,17 +314,19 @@ end
 
 -- === ОБНОВЛЕНИЕ ПОДКЛЮЧЕНИЙ ===
 local function updateConnections()
-    -- Отключаем все старые
     if flyConnection then flyConnection:Disconnect() flyConnection = nil end
     if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
     if speedConnection then speedConnection:Disconnect() speedConnection = nil end
     if infJumpConnection then infJumpConnection:Disconnect() infJumpConnection = nil end
     if antiflingConnection then antiflingConnection:Disconnect() antiflingConnection = nil end
     
-    -- Подключаем новые
+    if flyBodyVelocity then
+        flyBodyVelocity:Destroy()
+        flyBodyVelocity = nil
+    end
+    
     if Settings.FlyEnabled then
         flyConnection = RunService.Heartbeat:Connect(flyLoop)
-        print("FLY CONNECTED")
     end
     
     if Settings.NoclipEnabled then
@@ -248,6 +335,8 @@ local function updateConnections()
     
     if Settings.SpeedEnabled then
         speedConnection = RunService.RenderStepped:Connect(speedLoop)
+    else
+        resetSpeed()
     end
     
     if Settings.InfJumpEnabled then
@@ -257,17 +346,21 @@ local function updateConnections()
     if Settings.AntiflingEnabled then
         antiflingConnection = RunService.RenderStepped:Connect(antiflingLoop)
     end
+    
+    if Settings.SilentAimEnabled then
+        setupSilentAim()
+    end
 end
 
--- === TOGGLE FEATURE ===
+-- === TOGGLE ===
 local function toggleFeature(name, state)
     if state == nil then state = not Settings[name] end
     Settings[name] = state
     
     if name == "WallhackEnabled" then
         updateAllWallhack()
-    elseif name == "ShowFOV" then
-        if FOVCircle then FOVCircle.Visible = Settings.ShowFOV end
+    elseif name == "AimbotEnabled" or name == "LegitBotEnabled" or name == "ShowFOV" then
+        updateFOVCircle()
     else
         updateConnections()
     end
@@ -301,7 +394,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- === RAYFIELD GUI ===
+-- =====================================================
+-- RAYFIELD GUI (МЕНЮ)
+-- =====================================================
 local Window = Rayfield:CreateWindow({
     Name = "DeepHub",
     LoadingTitle = "DeepHub загружается...",
@@ -310,51 +405,149 @@ local Window = Rayfield:CreateWindow({
     ToggleUIKeybind = Enum.KeyCode.RightControl,
 })
 
--- Aimbot Tab
+-- === TAB 1: AIMBOT ===
 local AimbotTab = Window:CreateTab("Aimbot", 0)
-AimbotTab:CreateSection("Настройки аимбота")
-AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) Settings.AimbotEnabled = Value end})
-AimbotTab:CreateDropdown({Name = "Aimbot Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.AimbotMode, Flag = "AimbotMode", Callback = function(Option) Settings.AimbotMode = Option end})
-AimbotTab:CreateDropdown({Name = "Aimbot Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
+
+-- Rage Aimbot
+AimbotTab:CreateSection("🔴 Rage Aimbot")
+AimbotTab:CreateToggle({Name = "Rage Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) 
+    Settings.AimbotEnabled = Value 
+    toggleFeature("AimbotEnabled", Value)
+end})
+AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.AimbotMode, Flag = "AimbotMode", Callback = function(Option) Settings.AimbotMode = Option end})
+AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
 AimbotTab:CreateDropdown({Name = "Aim Type", Options = {"Mouse", "Camera"}, CurrentOption = Settings.AimType, Flag = "AimType", Callback = function(Option) Settings.AimType = Option end})
-AimbotTab:CreateSlider({Name = "FOV", Range = {10, 360}, Increment = 1, Suffix = "°", CurrentValue = Settings.FOV, Flag = "FOV", Callback = function(Value) Settings.FOV = Value if FOVCircle then FOVCircle.Radius = Value end end})
+AimbotTab:CreateSlider({Name = "FOV", Range = {10, 360}, Increment = 1, Suffix = "°", CurrentValue = Settings.FOV, Flag = "FOV", Callback = function(Value) Settings.FOV = Value updateFOVCircle() end})
 AimbotTab:CreateSlider({Name = "Smoothness", Range = {0, 1}, Increment = 0.05, Suffix = "", CurrentValue = Settings.Smoothness, Flag = "Smoothness", Callback = function(Value) Settings.Smoothness = Value end})
-AimbotTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) Settings.ShowFOV = Value if FOVCircle then FOVCircle.Visible = Value end end})
+AimbotTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) 
+    Settings.ShowFOV = Value 
+    updateFOVCircle()
+end})
 AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.VisibleCheck, Flag = "VisibleCheck", Callback = function(Value) Settings.VisibleCheck = Value end})
 AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.CheckTeam, Flag = "CheckTeam", Callback = function(Value) Settings.CheckTeam = Value end})
 
--- ESP Tab
+-- Legit Bot
+AimbotTab:CreateSection("🟢 Legit Bot")
+AimbotTab:CreateToggle({Name = "Legit Bot", CurrentValue = Settings.LegitBotEnabled, Flag = "LegitBotEnabled", Callback = function(Value) 
+    Settings.LegitBotEnabled = Value 
+    toggleFeature("LegitBotEnabled", Value)
+end})
+AimbotTab:CreateSlider({Name = "Legit FOV", Range = {10, 180}, Increment = 1, Suffix = "°", CurrentValue = Settings.LegitBotFOV, Flag = "LegitBotFOV", Callback = function(Value) Settings.LegitBotFOV = Value updateFOVCircle() end})
+AimbotTab:CreateSlider({Name = "Legit Smoothness", Range = {0, 1}, Increment = 0.05, Suffix = "", CurrentValue = Settings.LegitBotSmoothness, Flag = "LegitBotSmoothness", Callback = function(Value) Settings.LegitBotSmoothness = Value end})
+AimbotTab:CreateSlider({Name = "Legit Speed", Range = {1, 50}, Increment = 1, Suffix = "", CurrentValue = Settings.LegitBotSpeed, Flag = "LegitBotSpeed", Callback = function(Value) Settings.LegitBotSpeed = Value end})
+
+-- Silent Aim
+AimbotTab:CreateSection("🤫 Silent Aim")
+AimbotTab:CreateToggle({Name = "Silent Aim", CurrentValue = Settings.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(Value) 
+    Settings.SilentAimEnabled = Value 
+    toggleFeature("SilentAimEnabled", Value)
+end})
+AimbotTab:CreateSlider({Name = "Hit Chance", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = Settings.SilentAimHitChance, Flag = "SilentAimHitChance", Callback = function(Value) Settings.SilentAimHitChance = Value end})
+
+-- === TAB 2: ESP ===
 local ESPTab = Window:CreateTab("ESP", 1)
 ESPTab:CreateSection("Настройки ESP")
 ESPTab:CreateToggle({Name = "Wallhack (подсветка)", CurrentValue = Settings.WallhackEnabled, Flag = "WallhackEnabled", Callback = function(Value) Settings.WallhackEnabled = Value toggleFeature("WallhackEnabled", Value) end})
 
--- Movement Tab
+-- === TAB 3: MOVEMENT ===
 local MovementTab = Window:CreateTab("Movement", 2)
 MovementTab:CreateSection("Настройки движения")
 MovementTab:CreateToggle({Name = "Fly", CurrentValue = Settings.FlyEnabled, Flag = "FlyEnabled", Callback = function(Value) 
     Settings.FlyEnabled = Value 
     toggleFeature("FlyEnabled", Value)
-    print("FLY TOGGLED: " .. tostring(Value))
 end})
 MovementTab:CreateSlider({Name = "Fly Speed", Range = {1, 150}, Increment = 1, Suffix = " stud/s", CurrentValue = Settings.FlySpeed, Flag = "FlySpeed", Callback = function(Value) Settings.FlySpeed = Value end})
 MovementTab:CreateToggle({Name = "Noclip", CurrentValue = Settings.NoclipEnabled, Flag = "NoclipEnabled", Callback = function(Value) Settings.NoclipEnabled = Value toggleFeature("NoclipEnabled", Value) end})
-MovementTab:CreateToggle({Name = "Speed", CurrentValue = Settings.SpeedEnabled, Flag = "SpeedEnabled", Callback = function(Value) Settings.SpeedEnabled = Value toggleFeature("SpeedEnabled", Value) end})
-MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) Settings.SpeedValue = Value if Settings.SpeedEnabled then local hum = getHumanoid() if hum then hum.WalkSpeed = Value end end end})
+MovementTab:CreateToggle({Name = "Speed", CurrentValue = Settings.SpeedEnabled, Flag = "SpeedEnabled", Callback = function(Value) 
+    Settings.SpeedEnabled = Value 
+    toggleFeature("SpeedEnabled", Value)
+end})
+MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) 
+    Settings.SpeedValue = Value 
+    if Settings.SpeedEnabled then 
+        local hum = getHumanoid() 
+        if hum then 
+            hum.WalkSpeed = Value 
+        end 
+    end 
+end})
 MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = Settings.InfJumpEnabled, Flag = "InfJumpEnabled", Callback = function(Value) Settings.InfJumpEnabled = Value toggleFeature("InfJumpEnabled", Value) end})
 MovementTab:CreateToggle({Name = "Antifling", CurrentValue = Settings.AntiflingEnabled, Flag = "AntiflingEnabled", Callback = function(Value) Settings.AntiflingEnabled = Value toggleFeature("AntiflingEnabled", Value) end})
 
--- Info Tab
+-- === TAB 4: INFO ===
 local InfoTab = Window:CreateTab("Info", 3)
-InfoTab:CreateParagraph({Title = "DeepHub FULL FIX", Content = "By Artemo8244 & DeepSeek\n\nRightControl — скрыть/показать\nFly работает через Heartbeat\nSpeed регулируется плавно\nВсе функции стабильны"})
 
--- === ОСНОВНОЙ ЦИКЛ (Aimbot + FOV) ===
+local function getRecommendations()
+    return [[
+📌 РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ:
+
+🔴 RAGE AIMBOT:
+  • FOV: 120-180
+  • Smoothness: 0.3-0.5
+  • Aim Type: Mouse
+
+🟢 LEGIT BOT:
+  • FOV: 40-80
+  • Smoothness: 0.2-0.4
+  • Speed: 10-20
+
+🤫 SILENT AIM:
+  • Hit Chance: 85-100%
+  • Рекомендуется с Legit Bot
+
+🟡 MOVEMENT:
+  • Fly Speed: 20-50
+  • Speed Value: 25-32 (не выше!)
+  • В Counter Blox скорость > 32 = бан
+
+🟣 ESP:
+  • Wallhack — всегда включай
+
+⚠️ ВАЖНО:
+  • Speed не выше 32 в CB
+  • Silent Aim + Legit Bot = идеально
+  • Rage Aimbot используй осторожно
+]]
+end
+
+InfoTab:CreateParagraph({Title = "DeepHub | Рекомендации", Content = getRecommendations()})
+
+-- =====================================================
+-- ОСНОВНОЙ ЦИКЛ
+-- =====================================================
 RunService.RenderStepped:Connect(function()
-    if not FOVCircle then return end
-    local mousePos = UserInputService:GetMouseLocation()
-    FOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
-    FOVCircle.Radius = Settings.FOV
-    FOVCircle.Visible = Settings.ShowFOV
+    -- Обновление FOV кругов
+    if (Settings.AimbotEnabled or Settings.LegitBotEnabled) and Settings.ShowFOV then
+        if not FOVCircle then
+            updateFOVCircle()
+        end
+        if FOVCircle then
+            local mousePos = UserInputService:GetMouseLocation()
+            FOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
+            FOVCircle.Radius = Settings.FOV
+            FOVCircle.Visible = Settings.AimbotEnabled
+        end
+        if LegitFOVCircle then
+            local mousePos = UserInputService:GetMouseLocation()
+            LegitFOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
+            LegitFOVCircle.Radius = Settings.LegitBotFOV
+            LegitFOVCircle.Visible = Settings.LegitBotEnabled
+        end
+    else
+        if FOVCircle then FOVCircle:Remove() FOVCircle = nil end
+        if LegitFOVCircle then LegitFOVCircle:Remove() LegitFOVCircle = nil end
+    end
 
+    -- Silent Aim цель
+    SilentTarget = nil
+    if Settings.SilentAimEnabled then
+        local target = getClosestPlayer(Settings.LegitBotEnabled and Settings.LegitBotFOV or Settings.FOV)
+        if target then
+            SilentTarget = target
+        end
+    end
+
+    -- Rage Aimbot
     if Settings.AimbotEnabled then
         local aimActive = false
         if Settings.AimbotMode == "Hold" then
@@ -364,26 +557,51 @@ RunService.RenderStepped:Connect(function()
         end
 
         if aimActive then
-            local target = getClosestPlayer()
+            local target = getClosestPlayer(Settings.FOV)
             if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
                 local targetPart = target.Character[Settings.TargetPart]
                 if Settings.AimType == "Mouse" then
                     if mousemoverel then
+                        local mousePos = UserInputService:GetMouseLocation()
                         local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
-                        local sens = 10
-                        local dx = (screenPos.X - mousePos.X) * sens / 100
-                        local dy = (screenPos.Y - mousePos.Y) * sens / 100
+                        local dx = (screenPos.X - mousePos.X) * 0.1
+                        local dy = (screenPos.Y - mousePos.Y) * 0.1
                         mousemoverel(dx, dy)
                     else
                         Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
                     end
                 else
-                    local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 - Settings.Smoothness)
+                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
                 end
+            end
+        end
+    end
+    
+    -- Legit Bot
+    if Settings.LegitBotEnabled then
+        local target = getClosestPlayer(Settings.LegitBotFOV)
+        if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
+            local targetPart = target.Character[Settings.TargetPart]
+            local mousePos = UserInputService:GetMouseLocation()
+            local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
+            local dx = (screenPos.X - mousePos.X) * (Settings.LegitBotSpeed / 100)
+            local dy = (screenPos.Y - mousePos.Y) * (Settings.LegitBotSpeed / 100)
+            
+            if Settings.AimType == "Mouse" then
+                if mousemoverel then
+                    mousemoverel(dx, dy)
+                else
+                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                end
+            else
+                local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 - Settings.LegitBotSmoothness)
             end
         end
     end
 end)
 
-print("DeepHub FULL FIX загружен! Fly 100% работает.")
+print("=== DeepHub LOADED ===")
+print("Красный круг — Rage Aimbot")
+print("Зелёный круг — Legit Bot")
+print("Инфо вкладка — рекомендации по настройкам")
