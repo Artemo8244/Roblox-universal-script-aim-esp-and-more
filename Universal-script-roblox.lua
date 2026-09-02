@@ -2,6 +2,8 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Settings = {
     AimbotEnabled = false,
+    AimbotMode = "Hold",
+    AimbotKey = "MouseButton2",
     AimType = "Mouse",
     FOV = 150,
     Smoothness = 0.5,
@@ -16,6 +18,7 @@ local Settings = {
     SpeedValue = 32,
     InfJumpEnabled = false,
     AntiflingEnabled = false,
+    CheckTeam = true,  -- проверка на тимейтов
 }
 
 local Players = game:GetService("Players")
@@ -53,6 +56,13 @@ local function getHumanoid(plr)
     return nil
 end
 
+-- === ПРОВЕРКА НА ТИМЕЙТА ===
+local function isTeammate(plr)
+    if not Settings.CheckTeam then return false end
+    if not LocalPlayer.Team or not plr.Team then return false end
+    return LocalPlayer.Team == plr.Team
+end
+
 local function isVisible(targetCharacter)
     if not Settings.VisibleCheck then return true end
     local targetPart = targetCharacter:FindFirstChild(Settings.TargetPart)
@@ -70,6 +80,9 @@ local function getClosestPlayer()
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
+            -- Пропускаем тимейтов
+            if isTeammate(player) then continue end
+            
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if not humanoid or humanoid.Health <= 0 then continue end
             local targetPart = player.Character:FindFirstChild(Settings.TargetPart)
@@ -97,7 +110,7 @@ local function applyHighlight(player)
         if Settings.WallhackEnabled then
             local hl = Instance.new("Highlight")
             hl.Name = "DeepESP"
-            hl.FillColor = Color3.fromRGB(255, 0, 0)
+            hl.FillColor = isTeammate(player) and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
             hl.OutlineColor = Color3.fromRGB(255, 255, 255)
             hl.FillTransparency = 0.5
             hl.OutlineTransparency = 0
@@ -202,6 +215,33 @@ local function toggleFeature(name, state)
     end
 end
 
+local function isAimbotKeyPressed()
+    local key = Settings.AimbotKey
+    if key == "MouseButton1" then
+        return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    elseif key == "MouseButton2" then
+        return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    else
+        return UserInputService:IsKeyDown(Enum.KeyCode[key])
+    end
+end
+
+local aimbotToggled = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if Settings.AimbotMode == "Toggle" then
+        local key = Settings.AimbotKey
+        local pressed = false
+        if key == "MouseButton1" and input.UserInputType == Enum.UserInputType.MouseButton1 then pressed = true
+        elseif key == "MouseButton2" and input.UserInputType == Enum.UserInputType.MouseButton2 then pressed = true
+        elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
+        if pressed then
+            aimbotToggled = not aimbotToggled
+        end
+    end
+end)
+
 local Window = Rayfield:CreateWindow({
     Name = "DeepHub",
     LoadingTitle = "DeepHub загружается...",
@@ -213,11 +253,14 @@ local Window = Rayfield:CreateWindow({
 local AimbotTab = Window:CreateTab("Aimbot", 0)
 AimbotTab:CreateSection("Настройки аимбота")
 AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) Settings.AimbotEnabled = Value toggleFeature("AimbotEnabled", Value) end})
+AimbotTab:CreateDropdown({Name = "Aimbot Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.AimbotMode, Flag = "AimbotMode", Callback = function(Option) Settings.AimbotMode = Option end})
+AimbotTab:CreateDropdown({Name = "Aimbot Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
 AimbotTab:CreateDropdown({Name = "Aim Type", Options = {"Mouse", "Camera"}, CurrentOption = Settings.AimType, Flag = "AimType", Callback = function(Option) Settings.AimType = Option end})
 AimbotTab:CreateSlider({Name = "FOV", Range = {10, 360}, Increment = 1, Suffix = "°", CurrentValue = Settings.FOV, Flag = "FOV", Callback = function(Value) Settings.FOV = Value if FOVCircle then FOVCircle.Radius = Value end end})
 AimbotTab:CreateSlider({Name = "Smoothness", Range = {0, 1}, Increment = 0.05, Suffix = "", CurrentValue = Settings.Smoothness, Flag = "Smoothness", Callback = function(Value) Settings.Smoothness = Value end})
 AimbotTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) Settings.ShowFOV = Value if FOVCircle then FOVCircle.Visible = Value end end})
 AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.VisibleCheck, Flag = "VisibleCheck", Callback = function(Value) Settings.VisibleCheck = Value end})
+AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.CheckTeam, Flag = "CheckTeam", Callback = function(Value) Settings.CheckTeam = Value end})
 
 local ESPTab = Window:CreateTab("ESP", 1)
 ESPTab:CreateSection("Настройки ESP")
@@ -234,7 +277,7 @@ MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = Settings.InfJum
 MovementTab:CreateToggle({Name = "Antifling", CurrentValue = Settings.AntiflingEnabled, Flag = "AntiflingEnabled", Callback = function(Value) Settings.AntiflingEnabled = Value toggleFeature("AntiflingEnabled", Value) end})
 
 local InfoTab = Window:CreateTab("Info", 3)
-InfoTab:CreateParagraph({Title = "DeepHub", Content = "By Artemo8244 & DeepSeek\n\nRightControl — скрыть/показать\nAimbot: наведи курсор на врага и зажми ПКМ"})
+InfoTab:CreateParagraph({Title = "DeepHub", Content = "By Artemo8244 & DeepSeek\n\nRightControl — скрыть/показать\nHold/Toggle — режим аимбота\nCheck Team — не аимится в тимейтов\nESP: враги — красные, тимейты — зелёные"})
 
 RunService.RenderStepped:Connect(function()
     if not FOVCircle then return end
@@ -244,22 +287,31 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Visible = Settings.ShowFOV
 
     if Settings.AimbotEnabled then
-        local target = getClosestPlayer()
-        if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
-            local targetPart = target.Character[Settings.TargetPart]
-            if Settings.AimType == "Mouse" then
-                if mousemoverel then
-                    local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
-                    local sens = 10
-                    local dx = (screenPos.X - mousePos.X) * sens / 100
-                    local dy = (screenPos.Y - mousePos.Y) * sens / 100
-                    mousemoverel(dx, dy)
+        local aimActive = false
+        if Settings.AimbotMode == "Hold" then
+            aimActive = isAimbotKeyPressed()
+        else
+            aimActive = aimbotToggled
+        end
+
+        if aimActive then
+            local target = getClosestPlayer()
+            if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
+                local targetPart = target.Character[Settings.TargetPart]
+                if Settings.AimType == "Mouse" then
+                    if mousemoverel then
+                        local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
+                        local sens = 10
+                        local dx = (screenPos.X - mousePos.X) * sens / 100
+                        local dy = (screenPos.Y - mousePos.Y) * sens / 100
+                        mousemoverel(dx, dy)
+                    else
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    end
                 else
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 - Settings.Smoothness)
                 end
-            else
-                local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 - Settings.Smoothness)
             end
         end
     end
