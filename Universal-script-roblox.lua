@@ -7,7 +7,7 @@ local Settings = {
     AimbotKey = "MouseButton2",
     AimType = "Mouse",
     FOV = 150,
-    Smoothness = 0.5,
+    Smoothness = 1.5,
     TargetPart = "Head",
     VisibleCheck = true,
     ShowFOV = true,
@@ -15,12 +15,18 @@ local Settings = {
     
     -- Legit Bot
     LegitBotEnabled = false,
+    LegitBotMode = "Hold",
+    LegitBotKey = "MouseButton1",
     LegitBotFOV = 80,
     LegitBotSmoothness = 0.3,
     LegitBotSpeed = 15,
+    LegitBotVisibleCheck = true,
+    LegitBotCheckTeam = true,
     
     -- Silent Aim
     SilentAimEnabled = false,
+    SilentAimMode = "Hold",
+    SilentAimKey = "MouseButton2",
     SilentAimHitChance = 100,
     
     -- Movement
@@ -70,7 +76,6 @@ local function updateFOVCircle()
     
     if not Drawing then return end
     
-    -- Красный круг — Rage Aimbot
     if Settings.AimbotEnabled and Settings.ShowFOV then
         FOVCircle = Drawing.new("Circle")
         FOVCircle.Thickness = 2
@@ -81,7 +86,6 @@ local function updateFOVCircle()
         FOVCircle.Visible = true
     end
     
-    -- Зелёный круг — Legit Bot
     if Settings.LegitBotEnabled and Settings.ShowFOV then
         LegitFOVCircle = Drawing.new("Circle")
         LegitFOVCircle.Thickness = 2
@@ -99,8 +103,16 @@ updateFOVCircle()
 local raycastParams = RaycastParams.new()
 raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
+-- === ПРОВЕРКА КОМАНДЫ ===
 local function isTeammate(plr)
     if not Settings.CheckTeam then return false end
+    if not LocalPlayer.Team or not plr.Team then return false end
+    return LocalPlayer.Team == plr.Team
+end
+
+-- === ПРОВЕРКА ДЛЯ LEGIT BOT ===
+local function isLegitTeammate(plr)
+    if not Settings.LegitBotCheckTeam then return false end
     if not LocalPlayer.Team or not plr.Team then return false end
     return LocalPlayer.Team == plr.Team
 end
@@ -110,6 +122,7 @@ local function getTeamColor(plr)
     return plr.Team.TeamColor.Color
 end
 
+-- === ПРОВЕРКА ВИДИМОСТИ ===
 local function isVisible(targetCharacter)
     if not Settings.VisibleCheck then return true end
     local targetPart = targetCharacter:FindFirstChild(Settings.TargetPart)
@@ -120,6 +133,18 @@ local function isVisible(targetCharacter)
     return raycastResult == nil
 end
 
+-- === ПРОВЕРКА ДЛЯ LEGIT BOT ===
+local function isLegitVisible(targetCharacter)
+    if not Settings.LegitBotVisibleCheck then return true end
+    local targetPart = targetCharacter:FindFirstChild(Settings.TargetPart)
+    if not targetPart then return false end
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, targetCharacter}
+    local camPos = Camera.CFrame.Position
+    local raycastResult = workspace:Raycast(camPos, (targetPart.Position - camPos), raycastParams)
+    return raycastResult == nil
+end
+
+-- === ПОЛУЧЕНИЕ БЛИЖАЙШЕГО ИГРОКА (ДЛЯ RAGE) ===
 local function getClosestPlayer(fov)
     fov = fov or Settings.FOV
     local closestPlayer = nil
@@ -127,20 +152,44 @@ local function getClosestPlayer(fov)
     local mousePos = UserInputService:GetMouseLocation()
 
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            if isTeammate(player) then continue end
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if not humanoid or humanoid.Health <= 0 then continue end
-            local targetPart = player.Character:FindFirstChild(Settings.TargetPart)
-            if not targetPart then continue end
-            local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-            if onScreen then
-                local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                if distance < shortestDistance and isVisible(player.Character) then
-                    shortestDistance = distance
-                    closestPlayer = player
-                end
-            end
+        if player == LocalPlayer then continue end
+        if not player.Character then continue end
+        if isTeammate(player) then continue end
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health <= 0 then continue end
+        local targetPart = player.Character:FindFirstChild(Settings.TargetPart)
+        if not targetPart then continue end
+        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+        if not onScreen then continue end
+        local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+        if distance < shortestDistance and isVisible(player.Character) then
+            shortestDistance = distance
+            closestPlayer = player
+        end
+    end
+    return closestPlayer
+end
+
+-- === ПОЛУЧЕНИЕ БЛИЖАЙШЕГО ИГРОКА (ДЛЯ LEGIT) ===
+local function getLegitClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = Settings.LegitBotFOV
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+        if not player.Character then continue end
+        if isLegitTeammate(player) then continue end
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health <= 0 then continue end
+        local targetPart = player.Character:FindFirstChild(Settings.TargetPart)
+        if not targetPart then continue end
+        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+        if not onScreen then continue end
+        local distance = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+        if distance < shortestDistance and isLegitVisible(player.Character) then
+            shortestDistance = distance
+            closestPlayer = player
         end
     end
     return closestPlayer
@@ -366,9 +415,8 @@ local function toggleFeature(name, state)
     end
 end
 
--- === AIMBOT ===
-local function isAimbotKeyPressed()
-    local key = Settings.AimbotKey
+-- === КНОПКИ ===
+local function isKeyPressed(key)
     if key == "MouseButton1" then
         return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
     elseif key == "MouseButton2" then
@@ -378,24 +426,44 @@ local function isAimbotKeyPressed()
     end
 end
 
+-- === ТОГГЛЫ ДЛЯ КНОПОК ===
 local aimbotToggled = false
+local legitToggled = false
+local silentToggled = false
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
+    
     if Settings.AimbotMode == "Toggle" then
         local key = Settings.AimbotKey
         local pressed = false
         if key == "MouseButton1" and input.UserInputType == Enum.UserInputType.MouseButton1 then pressed = true
         elseif key == "MouseButton2" and input.UserInputType == Enum.UserInputType.MouseButton2 then pressed = true
         elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
-        if pressed then
-            aimbotToggled = not aimbotToggled
-        end
+        if pressed then aimbotToggled = not aimbotToggled end
+    end
+    
+    if Settings.LegitBotMode == "Toggle" then
+        local key = Settings.LegitBotKey
+        local pressed = false
+        if key == "MouseButton1" and input.UserInputType == Enum.UserInputType.MouseButton1 then pressed = true
+        elseif key == "MouseButton2" and input.UserInputType == Enum.UserInputType.MouseButton2 then pressed = true
+        elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
+        if pressed then legitToggled = not legitToggled end
+    end
+    
+    if Settings.SilentAimMode == "Toggle" then
+        local key = Settings.SilentAimKey
+        local pressed = false
+        if key == "MouseButton1" and input.UserInputType == Enum.UserInputType.MouseButton1 then pressed = true
+        elseif key == "MouseButton2" and input.UserInputType == Enum.UserInputType.MouseButton2 then pressed = true
+        elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
+        if pressed then silentToggled = not silentToggled end
     end
 end)
 
 -- =====================================================
--- RAYFIELD GUI (МЕНЮ)
+-- RAYFIELD GUI
 -- =====================================================
 local Window = Rayfield:CreateWindow({
     Name = "DeepHub",
@@ -409,7 +477,7 @@ local Window = Rayfield:CreateWindow({
 local AimbotTab = Window:CreateTab("Aimbot", 0)
 
 -- Rage Aimbot
-AimbotTab:CreateSection("🔴 Rage Aimbot")
+AimbotTab:CreateSection("� Rage Aimbot")
 AimbotTab:CreateToggle({Name = "Rage Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) 
     Settings.AimbotEnabled = Value 
     toggleFeature("AimbotEnabled", Value)
@@ -418,7 +486,7 @@ AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOp
 AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
 AimbotTab:CreateDropdown({Name = "Aim Type", Options = {"Mouse", "Camera"}, CurrentOption = Settings.AimType, Flag = "AimType", Callback = function(Option) Settings.AimType = Option end})
 AimbotTab:CreateSlider({Name = "FOV", Range = {10, 360}, Increment = 1, Suffix = "°", CurrentValue = Settings.FOV, Flag = "FOV", Callback = function(Value) Settings.FOV = Value updateFOVCircle() end})
-AimbotTab:CreateSlider({Name = "Smoothness", Range = {0, 1}, Increment = 0.05, Suffix = "", CurrentValue = Settings.Smoothness, Flag = "Smoothness", Callback = function(Value) Settings.Smoothness = Value end})
+AimbotTab:CreateSlider({Name = "Smoothness", Range = {0, 10}, Increment = 0.1, Suffix = "", CurrentValue = Settings.Smoothness, Flag = "Smoothness", Callback = function(Value) Settings.Smoothness = Value end})
 AimbotTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) 
     Settings.ShowFOV = Value 
     updateFOVCircle()
@@ -427,21 +495,27 @@ AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.VisibleC
 AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.CheckTeam, Flag = "CheckTeam", Callback = function(Value) Settings.CheckTeam = Value end})
 
 -- Legit Bot
-AimbotTab:CreateSection("🟢 Legit Bot")
+AimbotTab:CreateSection("� Legit Bot")
 AimbotTab:CreateToggle({Name = "Legit Bot", CurrentValue = Settings.LegitBotEnabled, Flag = "LegitBotEnabled", Callback = function(Value) 
     Settings.LegitBotEnabled = Value 
     toggleFeature("LegitBotEnabled", Value)
 end})
+AimbotTab:CreateDropdown({Name = "Legit Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.LegitBotMode, Flag = "LegitBotMode", Callback = function(Option) Settings.LegitBotMode = Option end})
+AimbotTab:CreateDropdown({Name = "Legit Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.LegitBotKey, Flag = "LegitBotKey", Callback = function(Option) Settings.LegitBotKey = Option end})
 AimbotTab:CreateSlider({Name = "Legit FOV", Range = {10, 180}, Increment = 1, Suffix = "°", CurrentValue = Settings.LegitBotFOV, Flag = "LegitBotFOV", Callback = function(Value) Settings.LegitBotFOV = Value updateFOVCircle() end})
 AimbotTab:CreateSlider({Name = "Legit Smoothness", Range = {0, 1}, Increment = 0.05, Suffix = "", CurrentValue = Settings.LegitBotSmoothness, Flag = "LegitBotSmoothness", Callback = function(Value) Settings.LegitBotSmoothness = Value end})
 AimbotTab:CreateSlider({Name = "Legit Speed", Range = {1, 50}, Increment = 1, Suffix = "", CurrentValue = Settings.LegitBotSpeed, Flag = "LegitBotSpeed", Callback = function(Value) Settings.LegitBotSpeed = Value end})
+AimbotTab:CreateToggle({Name = "Legit Visible Check", CurrentValue = Settings.LegitBotVisibleCheck, Flag = "LegitBotVisibleCheck", Callback = function(Value) Settings.LegitBotVisibleCheck = Value end})
+AimbotTab:CreateToggle({Name = "Legit Check Team", CurrentValue = Settings.LegitBotCheckTeam, Flag = "LegitBotCheckTeam", Callback = function(Value) Settings.LegitBotCheckTeam = Value end})
 
 -- Silent Aim
-AimbotTab:CreateSection("🤫 Silent Aim")
+AimbotTab:CreateSection("� Silent Aim")
 AimbotTab:CreateToggle({Name = "Silent Aim", CurrentValue = Settings.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(Value) 
     Settings.SilentAimEnabled = Value 
     toggleFeature("SilentAimEnabled", Value)
 end})
+AimbotTab:CreateDropdown({Name = "Silent Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.SilentAimMode, Flag = "SilentAimMode", Callback = function(Option) Settings.SilentAimMode = Option end})
+AimbotTab:CreateDropdown({Name = "Silent Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.SilentAimKey, Flag = "SilentAimKey", Callback = function(Option) Settings.SilentAimKey = Option end})
 AimbotTab:CreateSlider({Name = "Hit Chance", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = Settings.SilentAimHitChance, Flag = "SilentAimHitChance", Callback = function(Value) Settings.SilentAimHitChance = Value end})
 
 -- === TAB 2: ESP ===
@@ -479,33 +553,48 @@ local InfoTab = Window:CreateTab("Info", 3)
 
 local function getRecommendations()
     return [[
-📌 РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ:
+� РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ:
 
-🔴 RAGE AIMBOT:
-  • FOV: 120-180
-  • Smoothness: 0.3-0.5
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+� RAGE AIMBOT (для агрессивной игры):
+
+  • FOV: 120-200
+  • Smoothness: 1.0-3.0
   • Aim Type: Mouse
+  • Режим: Hold (зажим ПКМ)
+  • Visible Check: Включить
+  • Check Team: Включить
 
-🟢 LEGIT BOT:
-  • FOV: 40-80
-  • Smoothness: 0.2-0.4
-  • Speed: 10-20
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+� LEGIT BOT (для легитной игры):
 
-🤫 SILENT AIM:
+  • FOV: 30-60 (маленький)
+  • Smoothness: 0.2-0.4 (плавно)
+  • Speed: 8-15 (медленно)
+  • Режим: Toggle (вкл/выкл)
+  • Кнопка: MouseButton1 (ЛКМ)
+  • Visible Check: Включить
+  • Check Team: Включить
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+� SILENT AIM (для скрытного аима):
+
   • Hit Chance: 85-100%
-  • Рекомендуется с Legit Bot
+  • Режим: Toggle
+  • Кнопка: V или MouseButton2
 
-🟡 MOVEMENT:
-  • Fly Speed: 20-50
-  • Speed Value: 25-32 (не выше!)
-  • В Counter Blox скорость > 32 = бан
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+� КОМБО ДЛЯ ЛЕГИТНОЙ ИГРЫ:
+  
+  ✅ Legit Bot + Silent Aim = ИДЕАЛЬНО!
+  → AIM смотрится как у про-игрока
 
-🟣 ESP:
-  • Wallhack — всегда включай
-
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ ВАЖНО:
-  • Speed не выше 32 в CB
-  • Silent Aim + Legit Bot = идеально
+
+  • Speed не выше 32 в Counter Blox
+  • Visible Check — всегда включай
+  • Check Team — всегда включай
   • Rage Aimbot используй осторожно
 ]]
 end
@@ -516,11 +605,9 @@ InfoTab:CreateParagraph({Title = "DeepHub | Рекомендации", Content =
 -- ОСНОВНОЙ ЦИКЛ
 -- =====================================================
 RunService.RenderStepped:Connect(function()
-    -- Обновление FOV кругов
+    -- FOV круги
     if (Settings.AimbotEnabled or Settings.LegitBotEnabled) and Settings.ShowFOV then
-        if not FOVCircle then
-            updateFOVCircle()
-        end
+        if not FOVCircle then updateFOVCircle() end
         if FOVCircle then
             local mousePos = UserInputService:GetMouseLocation()
             FOVCircle.Position = Vector2.new(mousePos.X, mousePos.Y)
@@ -541,61 +628,65 @@ RunService.RenderStepped:Connect(function()
     -- Silent Aim цель
     SilentTarget = nil
     if Settings.SilentAimEnabled then
-        local target = getClosestPlayer(Settings.LegitBotEnabled and Settings.LegitBotFOV or Settings.FOV)
-        if target then
-            SilentTarget = target
-        end
+        local target = getLegitClosestPlayer()
+        if target then SilentTarget = target end
     end
 
     -- Rage Aimbot
     if Settings.AimbotEnabled then
-        local aimActive = false
+        local active = false
         if Settings.AimbotMode == "Hold" then
-            aimActive = isAimbotKeyPressed()
+            active = isKeyPressed(Settings.AimbotKey)
         else
-            aimActive = aimbotToggled
+            active = aimbotToggled
         end
-
-        if aimActive then
+        if active then
             local target = getClosestPlayer(Settings.FOV)
             if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
-                local targetPart = target.Character[Settings.TargetPart]
+                local part = target.Character[Settings.TargetPart]
                 if Settings.AimType == "Mouse" then
                     if mousemoverel then
-                        local mousePos = UserInputService:GetMouseLocation()
-                        local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
-                        local dx = (screenPos.X - mousePos.X) * 0.1
-                        local dy = (screenPos.Y - mousePos.Y) * 0.1
-                        mousemoverel(dx, dy)
+                        local mp = UserInputService:GetMouseLocation()
+                        local sp = Camera:WorldToViewportPoint(part.Position)
+                        mousemoverel((sp.X - mp.X) * (Settings.Smoothness / 10), (sp.Y - mp.Y) * (Settings.Smoothness / 10))
                     else
-                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, part.Position)
                     end
                 else
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    local cf = CFrame.new(Camera.CFrame.Position, part.Position)
+                    Camera.CFrame = Camera.CFrame:Lerp(cf, 1 - Settings.Smoothness / 10)
                 end
             end
         end
     end
     
-    -- Legit Bot
+    -- Legit Bot (исправлен, теперь РАБОТАЕТ)
     if Settings.LegitBotEnabled then
-        local target = getClosestPlayer(Settings.LegitBotFOV)
-        if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
-            local targetPart = target.Character[Settings.TargetPart]
-            local mousePos = UserInputService:GetMouseLocation()
-            local screenPos = Camera:WorldToViewportPoint(targetPart.Position)
-            local dx = (screenPos.X - mousePos.X) * (Settings.LegitBotSpeed / 100)
-            local dy = (screenPos.Y - mousePos.Y) * (Settings.LegitBotSpeed / 100)
-            
-            if Settings.AimType == "Mouse" then
-                if mousemoverel then
-                    mousemoverel(dx, dy)
+        local active = false
+        if Settings.LegitBotMode == "Hold" then
+            active = isKeyPressed(Settings.LegitBotKey)
+        else
+            active = legitToggled
+        end
+        if active then
+            local target = getLegitClosestPlayer()
+            if target and target.Character and target.Character:FindFirstChild(Settings.TargetPart) then
+                local part = target.Character[Settings.TargetPart]
+                local mp = UserInputService:GetMouseLocation()
+                local sp = Camera:WorldToViewportPoint(part.Position)
+                local dx = (sp.X - mp.X) * (Settings.LegitBotSpeed / 100)
+                local dy = (sp.Y - mp.Y) * (Settings.LegitBotSpeed / 100)
+                
+                if Settings.AimType == "Mouse" then
+                    if mousemoverel then
+                        mousemoverel(dx, dy)
+                    else
+                        Camera.CFrame = CFrame.new(Camera.CFrame.Position, part.Position)
+                    end
                 else
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    local cf = CFrame.new(Camera.CFrame.Position, part.Position)
+                    Camera.CFrame = Camera.CFrame:Lerp(cf, 1 - Settings.LegitBotSmoothness)
                 end
-            else
-                local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-                Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, 1 - Settings.LegitBotSmoothness)
             end
         end
     end
@@ -604,4 +695,5 @@ end)
 print("=== DeepHub LOADED ===")
 print("Красный круг — Rage Aimbot")
 print("Зелёный круг — Legit Bot")
+print("Legit Bot работает по кнопке!")
 print("Инфо вкладка — рекомендации по настройкам")
