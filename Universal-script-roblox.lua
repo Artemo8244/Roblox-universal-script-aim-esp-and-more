@@ -36,6 +36,8 @@ local Settings = {
     JumpPowerEnabled = false,
     JumpPowerValue = 50,
     AutoJumpEnabled = false,
+    SpinEnabled = false,
+    SpinSpeed = 50,
     
     WallhackEnabled = false,
 }
@@ -48,6 +50,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local SilentTarget = nil
 local AutoJumpConnection = nil
+local SpinConnection = nil
 
 local function getRoot()
     local char = LocalPlayer.Character
@@ -72,12 +75,30 @@ local function toggleAutoJump()
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end)
-        print("AutoJump ВКЛЮЧЁН")
     else
         if AutoJumpConnection then
             AutoJumpConnection:Disconnect()
             AutoJumpConnection = nil
-            print("AutoJump ВЫКЛЮЧЁН")
+        end
+    end
+end
+
+local function toggleSpin()
+    if Settings.SpinEnabled then
+        if SpinConnection then SpinConnection:Disconnect() end
+        SpinConnection = RunService.RenderStepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(Settings.SpinSpeed) * 0.1, 0)
+                end
+            end
+        end)
+    else
+        if SpinConnection then
+            SpinConnection:Disconnect()
+            SpinConnection = nil
         end
     end
 end
@@ -429,8 +450,8 @@ local function updateConnections()
         setupSilentAim()
     end
     
-    -- Auto Jump
     toggleAutoJump()
+    toggleSpin()
 end
 
 local function toggleFeature(name, state)
@@ -584,6 +605,14 @@ MovementTab:CreateToggle({Name = "Auto Jump", CurrentValue = Settings.AutoJumpEn
     Settings.AutoJumpEnabled = Value 
     toggleFeature("AutoJumpEnabled", Value)
 end})
+MovementTab:CreateToggle({Name = "Spin", CurrentValue = Settings.SpinEnabled, Flag = "SpinEnabled", Callback = function(Value) 
+    Settings.SpinEnabled = Value 
+    toggleFeature("SpinEnabled", Value)
+end})
+MovementTab:CreateSlider({Name = "Spin Speed", Range = {1, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpinSpeed, Flag = "SpinSpeed", Callback = function(Value) 
+    Settings.SpinSpeed = Value 
+    if Settings.SpinEnabled then toggleSpin() end
+end})
 
 local InfoTab = Window:CreateTab("Info", 3)
 
@@ -613,12 +642,7 @@ SILENT AIM:
 MOVEMENT:
   • Speed Value: 25-32 (не выше!)
   • Jump Power: 50-80 (нормально)
-  • Jump Power: 100-150 (высоко)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ВАЖНО:
-  • Speed не выше 32
-  • Visible Check — всегда включай
+  • Spin Speed: 30-70 (средне)
     
 Discord: artemo8244
 Telegram: artemo8244
