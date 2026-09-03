@@ -14,7 +14,7 @@ local Settings = {
     
     LegitBotEnabled = false,
     LegitBotMode = "Hold",
-    LegitBotKey = "MouseButton1",
+    LegitBotKey = "MouseButton2",
     LegitBotFOV = 80,
     LegitBotSmoothness = 0.3,
     LegitBotSpeed = 15,
