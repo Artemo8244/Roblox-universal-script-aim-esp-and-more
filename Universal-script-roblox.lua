@@ -38,6 +38,7 @@ local Settings = {
     AutoJumpEnabled = false,
     SpinEnabled = false,
     SpinSpeed = 50,
+    FullBrightEnabled = false,
     
     WallhackEnabled = false,
 }
@@ -47,10 +48,15 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
 local SilentTarget = nil
 local AutoJumpConnection = nil
 local SpinConnection = nil
+local FullBrightConnection = nil
+local OriginalBrightness = Lighting.Brightness
+local OriginalAmbient = Lighting.Ambient
+local OriginalOutdoorAmbient = Lighting.OutdoorAmbient
 
 local function getRoot()
     local char = LocalPlayer.Character
@@ -103,15 +109,32 @@ local function toggleSpin()
     end
 end
 
+local function toggleFullBright()
+    if Settings.FullBrightEnabled then
+        if FullBrightConnection then FullBrightConnection:Disconnect() end
+        FullBrightConnection = RunService.RenderStepped:Connect(function()
+            Lighting.Brightness = 2
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+            Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        end)
+    else
+        if FullBrightConnection then
+            FullBrightConnection:Disconnect()
+            FullBrightConnection = nil
+        end
+        Lighting.Brightness = OriginalBrightness
+        Lighting.Ambient = OriginalAmbient
+        Lighting.OutdoorAmbient = OriginalOutdoorAmbient
+    end
+end
+
 local FOVCircle = nil
 local LegitFOVCircle = nil
 
 local function updateFOVCircle()
     if FOVCircle then FOVCircle:Remove() FOVCircle = nil end
     if LegitFOVCircle then LegitFOVCircle:Remove() LegitFOVCircle = nil end
-    
     if not Drawing then return end
-    
     if Settings.AimbotEnabled and Settings.ShowFOV then
         FOVCircle = Drawing.new("Circle")
         FOVCircle.Thickness = 2
@@ -121,7 +144,6 @@ local function updateFOVCircle()
         FOVCircle.Filled = false
         FOVCircle.Visible = true
     end
-    
     if Settings.LegitBotEnabled and Settings.ShowFOV then
         LegitFOVCircle = Drawing.new("Circle")
         LegitFOVCircle.Thickness = 2
@@ -180,7 +202,6 @@ local function getClosestPlayer(fov)
     local closestPlayer = nil
     local shortestDistance = fov
     local mousePos = UserInputService:GetMouseLocation()
-
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         if not player.Character then continue end
@@ -204,7 +225,6 @@ local function getLegitClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = Settings.LegitBotFOV
     local mousePos = UserInputService:GetMouseLocation()
-
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         if not player.Character then continue end
@@ -226,18 +246,13 @@ end
 
 local function setupSilentAim()
     if not Settings.SilentAimEnabled then return end
-    
     local mt = getrawmetatable and getrawmetatable(game) or debug.getmetatable(game)
     if not mt then return end
-    
     local old_namecall = mt.__namecall
-    
     setreadonly(mt, false)
-    
     mt.__namecall = newcclosure(function(self, ...)
         local args = {...}
         local method = getnamecallmethod and getnamecallmethod() or "Unknown"
-        
         if method == "Raycast" and self == workspace and Settings.SilentAimEnabled then
             if SilentTarget and SilentTarget.Character then
                 local targetPart = SilentTarget.Character:FindFirstChild(Settings.TargetPart)
@@ -247,10 +262,8 @@ local function setupSilentAim()
                 end
             end
         end
-        
         return old_namecall(self, ...)
     end)
-    
     setreadonly(mt, true)
 end
 
@@ -261,17 +274,13 @@ local function applyWallhack(player)
         if not char then return end
         char:WaitForChild("HumanoidRootPart", 5)
         char:WaitForChild("Humanoid", 5)
-        
         if wallhackObjects[player] then
             for _, obj in pairs(wallhackObjects[player]) do obj:Destroy() end
             wallhackObjects[player] = nil
         end
-        
         if not Settings.WallhackEnabled then return end
-        
         local objects = {}
         local teamColor = getTeamColor(player)
-        
         local hl = Instance.new("Highlight")
         hl.Name = "WallhackHighlight"
         hl.FillColor = teamColor
@@ -281,10 +290,8 @@ local function applyWallhack(player)
         hl.Adornee = char
         hl.Parent = char
         table.insert(objects, hl)
-        
         wallhackObjects[player] = objects
     end
-    
     if player.Character then setup(player.Character) end
     player.CharacterAdded:Connect(setup)
 end
@@ -313,29 +320,24 @@ local function flyLoop(dt)
     if not Settings.FlyEnabled then return end
     local root = getRoot()
     if not root then return end
-    
     if not flyBodyVelocity or flyBodyVelocity.Parent == nil then
         flyBodyVelocity = Instance.new("BodyVelocity")
         flyBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
         flyBodyVelocity.Parent = root
     end
-    
     local move = Vector3.new()
     local cam = Camera
-    
     if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
     if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
     if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
     if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
     if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
     if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move - Vector3.new(0, 1, 0) end
-    
     if move.Magnitude > 0 then
         flyBodyVelocity.Velocity = move.Unit * Settings.FlySpeed * 10
     else
         flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
     end
-    
     root.Velocity = Vector3.new(0, 0, 0)
 end
 
@@ -408,56 +410,27 @@ local function updateConnections()
     if infJumpConnection then infJumpConnection:Disconnect() infJumpConnection = nil end
     if antiflingConnection then antiflingConnection:Disconnect() antiflingConnection = nil end
     if jumpPowerConnection then jumpPowerConnection:Disconnect() jumpPowerConnection = nil end
-    
-    if flyBodyVelocity then
-        flyBodyVelocity:Destroy()
-        flyBodyVelocity = nil
-    end
-    
-    if Settings.FlyEnabled then
-        flyConnection = RunService.Heartbeat:Connect(flyLoop)
-    end
-    
-    if Settings.NoclipEnabled then
-        noclipConnection = RunService.RenderStepped:Connect(noclipLoop)
-    end
-    
-    if Settings.SpeedEnabled then
-        speedConnection = RunService.RenderStepped:Connect(speedLoop)
-    else
-        resetSpeed()
-    end
-    
+    if flyBodyVelocity then flyBodyVelocity:Destroy() flyBodyVelocity = nil end
+    if Settings.FlyEnabled then flyConnection = RunService.Heartbeat:Connect(flyLoop) end
+    if Settings.NoclipEnabled then noclipConnection = RunService.RenderStepped:Connect(noclipLoop) end
+    if Settings.SpeedEnabled then speedConnection = RunService.RenderStepped:Connect(speedLoop) else resetSpeed() end
     if Settings.JumpPowerEnabled then
         applyJumpPower()
-        jumpPowerConnection = LocalPlayer.CharacterAdded:Connect(function()
-            wait(0.5)
-            applyJumpPower()
-        end)
+        jumpPowerConnection = LocalPlayer.CharacterAdded:Connect(function() wait(0.5) applyJumpPower() end)
     else
         resetJumpPower()
     end
-    
-    if Settings.InfJumpEnabled then
-        infJumpConnection = RunService.RenderStepped:Connect(infJumpLoop)
-    end
-    
-    if Settings.AntiflingEnabled then
-        antiflingConnection = RunService.RenderStepped:Connect(antiflingLoop)
-    end
-    
-    if Settings.SilentAimEnabled then
-        setupSilentAim()
-    end
-    
+    if Settings.InfJumpEnabled then infJumpConnection = RunService.RenderStepped:Connect(infJumpLoop) end
+    if Settings.AntiflingEnabled then antiflingConnection = RunService.RenderStepped:Connect(antiflingLoop) end
+    if Settings.SilentAimEnabled then setupSilentAim() end
     toggleAutoJump()
     toggleSpin()
+    toggleFullBright()
 end
 
 local function toggleFeature(name, state)
     if state == nil then state = not Settings[name] end
     Settings[name] = state
-    
     if name == "WallhackEnabled" then
         updateAllWallhack()
     elseif name == "AimbotEnabled" or name == "LegitBotEnabled" or name == "ShowFOV" then
@@ -483,7 +456,6 @@ local silentToggled = false
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    
     if Settings.AimbotMode == "Toggle" then
         local key = Settings.AimbotKey
         local pressed = false
@@ -492,7 +464,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
         if pressed then aimbotToggled = not aimbotToggled end
     end
-    
     if Settings.LegitBotMode == "Toggle" then
         local key = Settings.LegitBotKey
         local pressed = false
@@ -501,7 +472,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         elseif input.KeyCode == Enum.KeyCode[key] then pressed = true end
         if pressed then legitToggled = not legitToggled end
     end
-    
     if Settings.SilentAimMode == "Toggle" then
         local key = Settings.SilentAimKey
         local pressed = false
@@ -521,29 +491,19 @@ local Window = Rayfield:CreateWindow({
 })
 
 local AimbotTab = Window:CreateTab("Aimbot", 0)
-
 AimbotTab:CreateSection("Aimbot")
-AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) 
-    Settings.AimbotEnabled = Value 
-    toggleFeature("AimbotEnabled", Value)
-end})
+AimbotTab:CreateToggle({Name = "Aimbot", CurrentValue = Settings.AimbotEnabled, Flag = "AimbotEnabled", Callback = function(Value) Settings.AimbotEnabled = Value toggleFeature("AimbotEnabled", Value) end})
 AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.AimbotMode, Flag = "AimbotMode", Callback = function(Option) Settings.AimbotMode = Option end})
 AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.AimbotKey, Flag = "AimbotKey", Callback = function(Option) Settings.AimbotKey = Option end})
 AimbotTab:CreateDropdown({Name = "Aim Type", Options = {"Mouse", "Camera"}, CurrentOption = Settings.AimType, Flag = "AimType", Callback = function(Option) Settings.AimType = Option end})
 AimbotTab:CreateSlider({Name = "FOV", Range = {10, 360}, Increment = 1, Suffix = "°", CurrentValue = Settings.FOV, Flag = "FOV", Callback = function(Value) Settings.FOV = Value updateFOVCircle() end})
 AimbotTab:CreateSlider({Name = "Smoothness", Range = {0, 10}, Increment = 0.1, Suffix = "", CurrentValue = Settings.Smoothness, Flag = "Smoothness", Callback = function(Value) Settings.Smoothness = Value end})
-AimbotTab:CreateToggle({Name = "Show FOV", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) 
-    Settings.ShowFOV = Value 
-    updateFOVCircle()
-end})
+AimbotTab:CreateToggle({Name = "Show FOV", CurrentValue = Settings.ShowFOV, Flag = "ShowFOV", Callback = function(Value) Settings.ShowFOV = Value updateFOVCircle() end})
 AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.VisibleCheck, Flag = "VisibleCheck", Callback = function(Value) Settings.VisibleCheck = Value end})
 AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.CheckTeam, Flag = "CheckTeam", Callback = function(Value) Settings.CheckTeam = Value end})
 
 AimbotTab:CreateSection("Legit")
-AimbotTab:CreateToggle({Name = "Legit", CurrentValue = Settings.LegitBotEnabled, Flag = "LegitBotEnabled", Callback = function(Value) 
-    Settings.LegitBotEnabled = Value 
-    toggleFeature("LegitBotEnabled", Value)
-end})
+AimbotTab:CreateToggle({Name = "Legit", CurrentValue = Settings.LegitBotEnabled, Flag = "LegitBotEnabled", Callback = function(Value) Settings.LegitBotEnabled = Value toggleFeature("LegitBotEnabled", Value) end})
 AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.LegitBotMode, Flag = "LegitBotMode", Callback = function(Option) Settings.LegitBotMode = Option end})
 AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.LegitBotKey, Flag = "LegitBotKey", Callback = function(Option) Settings.LegitBotKey = Option end})
 AimbotTab:CreateSlider({Name = "FOV", Range = {10, 180}, Increment = 1, Suffix = "°", CurrentValue = Settings.LegitBotFOV, Flag = "LegitBotFOV", Callback = function(Value) Settings.LegitBotFOV = Value updateFOVCircle() end})
@@ -553,10 +513,7 @@ AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.LegitBot
 AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.LegitBotCheckTeam, Flag = "LegitBotCheckTeam", Callback = function(Value) Settings.LegitBotCheckTeam = Value end})
 
 AimbotTab:CreateSection("Silent Aim")
-AimbotTab:CreateToggle({Name = "Silent Aim", CurrentValue = Settings.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(Value) 
-    Settings.SilentAimEnabled = Value 
-    toggleFeature("SilentAimEnabled", Value)
-end})
+AimbotTab:CreateToggle({Name = "Silent Aim", CurrentValue = Settings.SilentAimEnabled, Flag = "SilentAimEnabled", Callback = function(Value) Settings.SilentAimEnabled = Value toggleFeature("SilentAimEnabled", Value) end})
 AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOption = Settings.SilentAimMode, Flag = "SilentAimMode", Callback = function(Option) Settings.SilentAimMode = Option end})
 AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.SilentAimKey, Flag = "SilentAimKey", Callback = function(Option) Settings.SilentAimKey = Option end})
 AimbotTab:CreateSlider({Name = "Hit Chance", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = Settings.SilentAimHitChance, Flag = "SilentAimHitChance", Callback = function(Value) Settings.SilentAimHitChance = Value end})
@@ -567,52 +524,19 @@ ESPTab:CreateToggle({Name = "Wallhack", CurrentValue = Settings.WallhackEnabled,
 
 local MovementTab = Window:CreateTab("Movement", 2)
 MovementTab:CreateSection("Movement")
-MovementTab:CreateToggle({Name = "Fly", CurrentValue = Settings.FlyEnabled, Flag = "FlyEnabled", Callback = function(Value) 
-    Settings.FlyEnabled = Value 
-    toggleFeature("FlyEnabled", Value)
-end})
+MovementTab:CreateToggle({Name = "Fly", CurrentValue = Settings.FlyEnabled, Flag = "FlyEnabled", Callback = function(Value) Settings.FlyEnabled = Value toggleFeature("FlyEnabled", Value) end})
 MovementTab:CreateSlider({Name = "Fly Speed", Range = {1, 150}, Increment = 1, Suffix = "", CurrentValue = Settings.FlySpeed, Flag = "FlySpeed", Callback = function(Value) Settings.FlySpeed = Value end})
 MovementTab:CreateToggle({Name = "Noclip", CurrentValue = Settings.NoclipEnabled, Flag = "NoclipEnabled", Callback = function(Value) Settings.NoclipEnabled = Value toggleFeature("NoclipEnabled", Value) end})
-MovementTab:CreateToggle({Name = "Speed", CurrentValue = Settings.SpeedEnabled, Flag = "SpeedEnabled", Callback = function(Value) 
-    Settings.SpeedEnabled = Value 
-    toggleFeature("SpeedEnabled", Value)
-end})
-MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) 
-    Settings.SpeedValue = Value 
-    if Settings.SpeedEnabled then 
-        local hum = getHumanoid() 
-        if hum then 
-            hum.WalkSpeed = Value 
-        end 
-    end 
-end})
-MovementTab:CreateToggle({Name = "Jump Power", CurrentValue = Settings.JumpPowerEnabled, Flag = "JumpPowerEnabled", Callback = function(Value) 
-    Settings.JumpPowerEnabled = Value 
-    toggleFeature("JumpPowerEnabled", Value)
-end})
-MovementTab:CreateSlider({Name = "Jump Power Value", Range = {20, 200}, Increment = 1, Suffix = "", CurrentValue = Settings.JumpPowerValue, Flag = "JumpPowerValue", Callback = function(Value) 
-    Settings.JumpPowerValue = Value 
-    if Settings.JumpPowerEnabled then 
-        local hum = getHumanoid() 
-        if hum then 
-            hum.JumpPower = Value 
-        end 
-    end 
-end})
+MovementTab:CreateToggle({Name = "Speed", CurrentValue = Settings.SpeedEnabled, Flag = "SpeedEnabled", Callback = function(Value) Settings.SpeedEnabled = Value toggleFeature("SpeedEnabled", Value) end})
+MovementTab:CreateSlider({Name = "Speed Value", Range = {10, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpeedValue, Flag = "SpeedValue", Callback = function(Value) Settings.SpeedValue = Value if Settings.SpeedEnabled then local hum = getHumanoid() if hum then hum.WalkSpeed = Value end end end})
+MovementTab:CreateToggle({Name = "Jump Power", CurrentValue = Settings.JumpPowerEnabled, Flag = "JumpPowerEnabled", Callback = function(Value) Settings.JumpPowerEnabled = Value toggleFeature("JumpPowerEnabled", Value) end})
+MovementTab:CreateSlider({Name = "Jump Power Value", Range = {20, 200}, Increment = 1, Suffix = "", CurrentValue = Settings.JumpPowerValue, Flag = "JumpPowerValue", Callback = function(Value) Settings.JumpPowerValue = Value if Settings.JumpPowerEnabled then local hum = getHumanoid() if hum then hum.JumpPower = Value end end end})
 MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = Settings.InfJumpEnabled, Flag = "InfJumpEnabled", Callback = function(Value) Settings.InfJumpEnabled = Value toggleFeature("InfJumpEnabled", Value) end})
 MovementTab:CreateToggle({Name = "Antifling", CurrentValue = Settings.AntiflingEnabled, Flag = "AntiflingEnabled", Callback = function(Value) Settings.AntiflingEnabled = Value toggleFeature("AntiflingEnabled", Value) end})
-MovementTab:CreateToggle({Name = "Auto Jump", CurrentValue = Settings.AutoJumpEnabled, Flag = "AutoJumpEnabled", Callback = function(Value) 
-    Settings.AutoJumpEnabled = Value 
-    toggleFeature("AutoJumpEnabled", Value)
-end})
-MovementTab:CreateToggle({Name = "Spin", CurrentValue = Settings.SpinEnabled, Flag = "SpinEnabled", Callback = function(Value) 
-    Settings.SpinEnabled = Value 
-    toggleFeature("SpinEnabled", Value)
-end})
-MovementTab:CreateSlider({Name = "Spin Speed", Range = {1, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpinSpeed, Flag = "SpinSpeed", Callback = function(Value) 
-    Settings.SpinSpeed = Value 
-    if Settings.SpinEnabled then toggleSpin() end
-end})
+MovementTab:CreateToggle({Name = "Auto Jump", CurrentValue = Settings.AutoJumpEnabled, Flag = "AutoJumpEnabled", Callback = function(Value) Settings.AutoJumpEnabled = Value toggleFeature("AutoJumpEnabled", Value) end})
+MovementTab:CreateToggle({Name = "Spin", CurrentValue = Settings.SpinEnabled, Flag = "SpinEnabled", Callback = function(Value) Settings.SpinEnabled = Value toggleFeature("SpinEnabled", Value) end})
+MovementTab:CreateSlider({Name = "Spin Speed", Range = {1, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpinSpeed, Flag = "SpinSpeed", Callback = function(Value) Settings.SpinSpeed = Value if Settings.SpinEnabled then toggleSpin() end end})
+MovementTab:CreateToggle({Name = "Full Bright", CurrentValue = Settings.FullBrightEnabled, Flag = "FullBrightEnabled", Callback = function(Value) Settings.FullBrightEnabled = Value toggleFeature("FullBrightEnabled", Value) end})
 
 local InfoTab = Window:CreateTab("Info", 3)
 
@@ -620,29 +544,22 @@ local function getRecommendations()
     return [[
 РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AIMBOT:
   • FOV: 120-200
   • Smoothness: 1.0-3.0
-  • Visible Check: Включить
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LEGIT:
   • FOV: 30-60
   • Smoothness: 0.2-0.4
   • Speed: 8-15
-  • Режим: Toggle
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SILENT AIM:
   • Hit Chance: 85-100%
-  • Режим: Toggle
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MOVEMENT:
   • Speed Value: 25-32 (не выше!)
-  • Jump Power: 50-80 (нормально)
-  • Spin Speed: 30-70 (средне)
+  • Jump Power: 50-80
+  • Spin Speed: 30-70
     
 Discord: artemo8244
 Telegram: artemo8244
@@ -721,7 +638,6 @@ RunService.RenderStepped:Connect(function()
                 local sp = Camera:WorldToViewportPoint(part.Position)
                 local dx = (sp.X - mp.X) * (Settings.LegitBotSpeed / 100)
                 local dy = (sp.Y - mp.Y) * (Settings.LegitBotSpeed / 100)
-                
                 if Settings.AimType == "Mouse" then
                     if mousemoverel then
                         mousemoverel(dx, dy)
