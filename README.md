@@ -42,7 +42,7 @@ Other
 
     Full Bright
 
-    Teleport
+     Click Tp
 
 🎮 Управление
 Клавиша	Действие
@@ -110,7 +110,7 @@ Other
 
     Full Bright
 
-    Teleport
+    Click Tp
 
 🎮 Controls
 Key	Action
