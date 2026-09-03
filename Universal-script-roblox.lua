@@ -591,6 +591,11 @@ MOVEMENT:
 ВАЖНО:
   • Speed не выше 32
   • Visible Check — всегда включай
+    
+Discord: artemo8244
+Telegram: artemo8244
+Tiktok: artemo8244
+Roblox: Artemo8244
 ]]
 end
 
