@@ -42,8 +42,6 @@ Other
 
     Full Bright
 
-     Click Tp
-
 🎮 Управление
 Клавиша	Действие
 RightControl	Меню
@@ -109,9 +107,7 @@ Movement
 Other
 
     Full Bright
-
-    Click Tp
-
+    
 🎮 Controls
 Key	Action
 RightControl	Menu
