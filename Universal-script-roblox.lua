@@ -35,6 +35,7 @@ local Settings = {
     AntiflingEnabled = false,
     JumpPowerEnabled = false,
     JumpPowerValue = 50,
+    AutoJumpEnabled = false,
     
     WallhackEnabled = false,
 }
@@ -46,6 +47,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local SilentTarget = nil
+local AutoJumpConnection = nil
 
 local function getRoot()
     local char = LocalPlayer.Character
@@ -59,6 +61,25 @@ local function getHumanoid()
     local char = LocalPlayer.Character
     if char then return char:FindFirstChildOfClass("Humanoid") end
     return nil
+end
+
+local function toggleAutoJump()
+    if Settings.AutoJumpEnabled then
+        if AutoJumpConnection then AutoJumpConnection:Disconnect() end
+        AutoJumpConnection = RunService.RenderStepped:Connect(function()
+            local hum = getHumanoid()
+            if hum and hum.FloorMaterial ~= Enum.Material.Air then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+        print("AutoJump ВКЛЮЧЁН")
+    else
+        if AutoJumpConnection then
+            AutoJumpConnection:Disconnect()
+            AutoJumpConnection = nil
+            print("AutoJump ВЫКЛЮЧЁН")
+        end
+    end
 end
 
 local FOVCircle = nil
@@ -407,6 +428,9 @@ local function updateConnections()
     if Settings.SilentAimEnabled then
         setupSilentAim()
     end
+    
+    -- Auto Jump
+    toggleAutoJump()
 end
 
 local function toggleFeature(name, state)
@@ -556,6 +580,10 @@ MovementTab:CreateSlider({Name = "Jump Power Value", Range = {20, 200}, Incremen
 end})
 MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = Settings.InfJumpEnabled, Flag = "InfJumpEnabled", Callback = function(Value) Settings.InfJumpEnabled = Value toggleFeature("InfJumpEnabled", Value) end})
 MovementTab:CreateToggle({Name = "Antifling", CurrentValue = Settings.AntiflingEnabled, Flag = "AntiflingEnabled", Callback = function(Value) Settings.AntiflingEnabled = Value toggleFeature("AntiflingEnabled", Value) end})
+MovementTab:CreateToggle({Name = "Auto Jump", CurrentValue = Settings.AutoJumpEnabled, Flag = "AutoJumpEnabled", Callback = function(Value) 
+    Settings.AutoJumpEnabled = Value 
+    toggleFeature("AutoJumpEnabled", Value)
+end})
 
 local InfoTab = Window:CreateTab("Info", 3)
 
