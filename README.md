@@ -50,7 +50,7 @@ MouseButton2	Аимбот (удержание)
 Все клавиши настраиваются в меню.
 📥 Запуск
 lua
-
+Nverlose меню loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Menu-neverlose'))()
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
 
 🔧 Рекомендации
