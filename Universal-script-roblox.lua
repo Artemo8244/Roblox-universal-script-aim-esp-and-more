@@ -47,15 +47,14 @@ local Settings = {
     SpinSpeed = 50,
     FullBrightEnabled = false,
     
-
     ESPEnabled = false,
     TracersEnabled = false,
     ChamsEnabled = false,
+    ESPIgnoreWalls = false,
     NPCESPEnabled = false,
     NPCTracersEnabled = false,
     NPCChamsEnabled = false,
     
-
     AutoFarmEnabled = false,
     AutoFarmDelay = 5,
     AutoFarmTPDelay = 0.2,
@@ -129,7 +128,6 @@ local function isPlayerAlive(player)
     if not hum then return false end
     return hum.Health > 0
 end
-
 
 local function IsNPC(model)
     local hum = model:FindFirstChildOfClass("Humanoid")
@@ -209,7 +207,6 @@ local function GetVisibility(targetId, char)
     return isVisible
 end
 
-
 local function HideESP(id)
     local cached = ESP_Cache[id]
     if not cached then return end
@@ -264,11 +261,29 @@ Players.PlayerRemoving:Connect(function(player)
     removeChams(tostring(player.UserId))
 end)
 
+
 local function getESPColor(player, isNPC, visible)
+  
     if isNPC then
+        if Settings.ESPIgnoreWalls then
+            return Color3.fromRGB(0, 200, 255) 
+        end
         return visible and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(200, 0, 255)
     end
     
+    local isTeammate = false
+    if player and player.Team and LocalPlayer.Team then
+        if player.Team == LocalPlayer.Team then
+            isTeammate = true
+        end
+    end
+    
+
+    if isTeammate then
+        return Color3.fromRGB(0, 255, 0)
+    end
+    
+
     if isMM2() and player and MM2Roles[player] then
         local role = MM2Roles[player]
         if role == "Murderer" then return Color3.fromRGB(255, 50, 50) end
@@ -276,9 +291,25 @@ local function getESPColor(player, isNPC, visible)
         if role == "Innocent" then return Color3.fromRGB(50, 255, 50) end
     end
     
-    if player and player.Team and player.Team == LocalPlayer.Team then
-        return Color3.fromRGB(0, 128, 255)
-    elseif visible then
+
+    if Settings.ESPIgnoreWalls then
+        if player and player.Team and player.Team.TeamColor then
+            return player.Team.TeamColor.Color
+        end
+        return Color3.fromRGB(0, 255, 0)
+    end
+    
+
+    if player and player.Team and player.Team.TeamColor then
+        local teamColor = player.Team.TeamColor.Color
+        if not visible then
+            teamColor = Color3.new(teamColor.R * 0.5, teamColor.G * 0.5, teamColor.B * 0.5)
+        end
+        return teamColor
+    end
+    
+
+    if visible then
         return Color3.fromRGB(0, 255, 0)
     else
         return Color3.fromRGB(255, 0, 0)
@@ -305,7 +336,7 @@ local function DrawESP(id, char, hrp, name, player, isNPC)
     
     local visible = GetVisibility(id, char)
     local renderColor = getESPColor(player, isNPC, visible)
-
+    
     if showChams then
         applyChams(id, char, renderColor)
     else
@@ -832,8 +863,7 @@ end
 
 local function updateConnections()
     if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end
-    if speedConnection then speedConnection:Disconnect() speedConnection = nil end
+    if noclipConnection then noclipConnection:Disconnect() noclipConnection = nil end    if speedConnection then speedConnection:Disconnect() speedConnection = nil end
     if infJumpConnection then infJumpConnection:Disconnect() infJumpConnection = nil end
     if antiflingConnection then antiflingConnection:Disconnect() antiflingConnection = nil end
     if jumpPowerConnection then jumpPowerConnection:Disconnect() jumpPowerConnection = nil end
@@ -951,6 +981,7 @@ ESPTab:CreateSection("Player ESP")
 ESPTab:CreateToggle({Name = "Player ESP", CurrentValue = Settings.ESPEnabled, Flag = "ESPEnabled", Callback = function(Value) Settings.ESPEnabled = Value end})
 ESPTab:CreateToggle({Name = "ESP Tracers", CurrentValue = Settings.TracersEnabled, Flag = "TracersEnabled", Callback = function(Value) Settings.TracersEnabled = Value end})
 ESPTab:CreateToggle({Name = "Player Chams", CurrentValue = Settings.ChamsEnabled, Flag = "ChamsEnabled", Callback = function(Value) Settings.ChamsEnabled = Value end})
+ESPTab:CreateToggle({Name = "Ignore Walls (не затемнять)", CurrentValue = Settings.ESPIgnoreWalls, Flag = "ESPIgnoreWalls", Callback = function(Value) Settings.ESPIgnoreWalls = Value end})
 ESPTab:CreateSection("NPC ESP")
 ESPTab:CreateToggle({Name = "NPC ESP", CurrentValue = Settings.NPCESPEnabled, Flag = "NPCESPEnabled", Callback = function(Value) Settings.NPCESPEnabled = Value end})
 ESPTab:CreateToggle({Name = "NPC Tracers", CurrentValue = Settings.NPCTracersEnabled, Flag = "NPCTracersEnabled", Callback = function(Value) Settings.NPCTracersEnabled = Value end})
@@ -1004,6 +1035,12 @@ MOVEMENT:
 
 AUTO FARM:
   • Задержка: 5 сек (защита от кика!)
+
+ESP:
+  • Ignore Walls — не затемняет за стенами
+  • Тиммейт — зелёный
+  • Враг — цвет команды
+  • MM2: 🔴 Маньяк, 🔵 Шериф, 🟢 Невинный
 
 Discord: artemo8244
 Telegram: artemo8244
