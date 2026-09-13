@@ -294,7 +294,6 @@ local function toggleTriggerBot()
     if not Settings.TriggerBotEnabled then return end
     
     TriggerBotConnection = RunService.RenderStepped:Connect(function()
-        -- Всегда на MouseButton2
         if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
         
         local mousePos = UserInputService:GetMouseLocation()
