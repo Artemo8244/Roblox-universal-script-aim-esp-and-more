@@ -4,75 +4,89 @@
     Нашли баг? Хотите помочь? Есть вопросы? Напишите мне с радостью!
 
 DeepHub — универсальный скрипт для игр Roblox.
-
 Разработан с помощью нейросети DeepSeek. Протестирован лично — Artemo8244.
 ⚡ Функции
+🎯 Aimbot
 
-Aimbot
+    Aimbot — авто-прицел
 
-    Аимбот (авто-прицел)
+    Legit Bot — плавный аимбот
 
-    Legit Bot (плавный)
+    Silent Aim — пули летят в цель
 
-    Silent Aim (пули в цель)
+    Trigger Bot — авто-выстрел при наведении
 
-    FOV круг, проверка видимости, проверка команды
+    FOV круг — визуальный радиус
 
-ESP
+    Visible Check — проверка стен
 
-    Wallhack (подсветка врагов)
+    Check Team — не атакует тиммейтов
 
-Movement
+👁️ ESP
 
-    Fly (полёт)
+    Player ESP — рамка + имя + дистанция
 
-    Noclip (сквозь стены)
+    ESP Tracers — линия от низа экрана
 
-    Speed (скорость)
+    Player Chams — подсветка силуэта через стены
 
-    Jump Power (сила прыжка)
+    NPC ESP / Tracers / Chams — то же для NPC
 
-    Infinite Jump
+    Ignore Walls — не затемнять за стенами
 
-    Bhop
+🚀 Movement
 
-    Spin
+    Fly — полёт
 
-Other
+    Noclip — сквозь стены
 
-    Full Bright
+    Speed — скорость ходьбы
+
+    Jump Power — сила прыжка
+
+    Infinite Jump — бесконечные прыжки
+
+    Auto Jump — авто-прыжок
+
+    Spin — вращение персонажа
+
+    Full Bright — полная яркость
+
+🌾 Other
+
+    AutoFarm — авто-фарм монет
 
 🎮 Управление
 Клавиша	Действие
-RightControl	Меню
-MouseButton2	Аимбот (удержание)
+RightControl	Открыть/закрыть меню
+MouseButton2	Аимбот (удержание) / Trigger Bot
 
 Все клавиши настраиваются в меню.
 📥 Запуск
+
+Neverlose меню:
 lua
 
-Neverlose меню loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Menu-neverlose'))()
+loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Menu-neverlose'))()
+
+Обычное меню:
+lua
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
 
-🔧 Рекомендации
-Функция	Значение
-Aimbot FOV	120-200
-Aimbot Smoothness	1.0-3.0
-Legit FOV	30-60
-Legit Smoothness	0.2-0.4
-Speed	25-32 (не выше!)
-📞 Контакты
 
-Discord / Telegram / TikTok: artemo8244
-Roblox: Artemo8244
-📌 DeepHub — Script Information
+📞 Контакты
+Платформа	Ссылка
+Discord	artemo8244
+Telegram	artemo8244
+TikTok	artemo8244
+Roblox	Artemo8244
+📌 DeepHub — Script Information (EN)
 
     ⚠️ The script is in BETA. Some features may be improved.
     Found a bug? Want to help? Have questions? Feel free to write to me!
 
 DeepHub — universal script for Roblox games.
-
 Developed with the help of DeepSeek AI. Personally tested by — Artemo8244.
 ⚡ Features
 
@@ -84,50 +98,45 @@ Aimbot
 
     Silent Aim (bullets hit the target)
 
+    Trigger Bot
+
     FOV circle, visibility check, team check
 
 ESP
 
-    Wallhack (enemy highlight)
+    Player ESP, Tracers, Chams
+
+    NPC ESP, Tracers, Chams
+
+    Ignore Walls
 
 Movement
 
-    Fly
+    Fly, Noclip, Speed
 
-    Noclip
+    Jump Power, Infinite Jump, Auto Jump
 
-    Speed
-
-    Jump Power
-
-    Infinite Jump
-
-    Bhop
-
-    Spin
+    Spin, Full Bright
 
 Other
 
-    Full Bright
-    
+    AutoFarm
+
 🎮 Controls
 Key	Action
 RightControl	Menu
-MouseButton2	Aimbot (hold)
-
-All keys are customizable in the menu.
+MouseButton2	Aimbot / Trigger
 📥 How to run
+
+Neverlose menu:
+lua
+
+loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Menu-neverlose'))()
+
+Default menu:
 lua
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
-
-🔧 Recommendations
-Feature	Value
-Aimbot FOV	120-200
-Aimbot Smoothness	1.0-3.0
-Legit FOV	30-60
-Legit Smoothness	0.2-0.4
-Speed	25-32 (not higher!)
 📞 Contacts
 
 Discord / Telegram / TikTok: artemo8244
