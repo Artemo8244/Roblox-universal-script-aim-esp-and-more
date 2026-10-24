@@ -70,9 +70,11 @@ lua
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Menu-neverlose'))()
 
 Обычное меню:
-lua
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Universal-script-roblox.lua'))()
+
+Nursultan Меню:
+loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Nursultan-menu.lua'))()
 
 
 📞 Контакты
