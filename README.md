@@ -76,6 +76,9 @@ loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-uni
 Nursultan Меню:
 loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/Nursultan-menu.lua'))()
 
+Новое меню обновляется будет только это:
+loadstring(game:HttpGet('https://raw.githubusercontent.com/Artemo8244/Roblox-universal-script-aim-esp-and-more/refs/heads/main/onlythisisupdated.lua'))()
+
 
 📞 Контакты
 Платформа	Ссылка
